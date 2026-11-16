@@ -1,0 +1,28 @@
+# depslib dependency file v1.0
+1794834793 source:d:\iiuc\7th semester\final\computer graphics lab  - 4742\amusementpark\project\amusementpark\main.cpp
+	<GL/freeglut.h>
+	<cmath>
+
+1794825240 d:\iiuc\7th semester\final\computer graphics lab  - 4742\amusementpark\libraries\freeglut\include\gl\freeglut.h
+	"freeglut_std.h"
+	"freeglut_ext.h"
+
+1794825241 d:\iiuc\7th semester\final\computer graphics lab  - 4742\amusementpark\libraries\freeglut\include\gl\freeglut_std.h
+	<windows.h>
+	<EGL/egl.h>
+	<GLES/gl.h>
+	<GLES2/gl2.h>
+	<OpenGL/gl.h>
+	<OpenGL/glu.h>
+	<GL/gl.h>
+	<GL/glu.h>
+	<stdlib.h>
+
+1794825241 d:\iiuc\7th semester\final\computer graphics lab  - 4742\amusementpark\libraries\freeglut\include\gl\freeglut_ext.h
+	<stdarg.h>
+	"freeglut_ucall.h"
+
+1794825241 d:\iiuc\7th semester\final\computer graphics lab  - 4742\amusementpark\libraries\freeglut\include\gl\freeglut_ucall.h
+	<stdarg.h>
+	<stdlib.h>
+
