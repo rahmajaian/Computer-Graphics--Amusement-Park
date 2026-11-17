@@ -8,11 +8,11 @@
 #endif
 
 // --- Global State & Animation Variables ---
-bool isSunset = false; // Evening Sunset Mode toggle
+bool isSunset = false; // Evening Sunset Mode toggle (Press 'N')
 bool isPaused = false;
 float globalTime = 0.0f;
 
-// Static Fixed Camera Position (Higher up to show more sky)
+// Static Fixed Camera Position (Sky-Focused View)
 float camX = 0.0f, camY = 19.0f, camZ = 48.0f;
 
 // Animation States
@@ -42,7 +42,7 @@ struct Bird {
 };
 std::vector<Bird> birds;
 
-// Roller Coaster Track Function
+// --- 3D Vertical Loop Roller Coaster Track Function ---
 void getCoasterPoint(float t, float &x, float &y, float &z) {
     float angle = t;
     float radiusX = 24.0f;
@@ -62,6 +62,7 @@ void getCoasterPoint(float t, float &x, float &y, float &z) {
     }
 }
 
+// --- Scene Initialization ---
 void initScene() {
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_LIGHTING);
@@ -127,16 +128,16 @@ void drawSkyDome() {
     glPopMatrix();
 }
 
-// --- Ground & Street Lamps ---
-void drawGroundAndPlaza() {
-    // Grass
-    glColor3f(isSunset ? 0.08f : 0.18f, isSunset ? 0.18f : 0.55f, isSunset ? 0.04f : 0.20f);
+// --- Ground, Urban City Skyline Backdrop & Plaza ---
+void drawGroundAndCity() {
+    // Massive Ground Plane
+    glColor3f(isSunset ? 0.08f : 0.16f, isSunset ? 0.18f : 0.52f, isSunset ? 0.04f : 0.18f);
     glBegin(GL_QUADS);
     glNormal3f(0, 1, 0);
-    glVertex3f(-70, 0, -70);
-    glVertex3f(70, 0, -70);
-    glVertex3f(70, 0, 70);
-    glVertex3f(-70, 0, 70);
+    glVertex3f(-150, 0, -150);
+    glVertex3f(150, 0, -150);
+    glVertex3f(150, 0, 150);
+    glVertex3f(-150, 0, 150);
     glEnd();
 
     // Cobblestone Plaza
@@ -148,6 +149,55 @@ void drawGroundAndPlaza() {
     glVertex3f(34, 0.03f, 26);
     glVertex3f(-34, 0.03f, 26);
     glEnd();
+
+    // --- City Skyline Backdrop ---
+    float bldgWidths[]  = {6.0f, 4.5f, 7.0f, 5.0f, 8.0f, 4.0f, 6.5f, 5.5f, 7.5f, 4.2f, 6.0f};
+    float bldgHeights[] = {18.0f, 26.0f, 14.0f, 32.0f, 22.0f, 28.0f, 16.0f, 35.0f, 20.0f, 24.0f, 19.0f};
+
+    float currentX = -65.0f;
+    for (int i = 0; i < 11; i++) {
+        float w = bldgWidths[i];
+        float h = bldgHeights[i];
+        float depth = 5.0f;
+
+        if (!isSunset) {
+            glColor3f(0.35f + (i % 3) * 0.08f, 0.42f + (i % 2) * 0.06f, 0.52f + (i % 4) * 0.05f);
+        } else {
+            glColor3f(0.18f + (i % 3) * 0.03f, 0.12f + (i % 2) * 0.02f, 0.16f + (i % 4) * 0.03f);
+        }
+
+        glPushMatrix();
+        glTranslatef(currentX + w / 2.0f, h / 2.0f, -60.0f);
+        glScalef(w, h, depth);
+        glutSolidCube(1.0f);
+        glPopMatrix();
+
+        // Building Windows (Glowing in sunset mode)
+        if (isSunset) {
+            GLfloat winEmit[] = {0.95f, 0.75f, 0.3f, 1.0f};
+            glMaterialfv(GL_FRONT, GL_EMISSION, winEmit);
+            glColor3f(1.0f, 0.85f, 0.4f);
+        } else {
+            glColor3f(0.65f, 0.75f, 0.85f);
+        }
+
+        for (float wy = 3.0f; wy < h - 2.0f; wy += 3.0f) {
+            for (float wx = currentX + 1.0f; wx < currentX + w - 1.0f; wx += 1.8f) {
+                glPushMatrix();
+                glTranslatef(wx, wy, -57.4f);
+                glScalef(0.8f, 1.2f, 0.1f);
+                glutSolidCube(1.0f);
+                glPopMatrix();
+            }
+        }
+
+        if (isSunset) {
+            GLfloat noEmit[] = {0, 0, 0, 1};
+            glMaterialfv(GL_FRONT, GL_EMISSION, noEmit);
+        }
+
+        currentX += w + 1.2f;
+    }
 
     // Street Lamps with Warm Evening Glow
     float lampCoords[][2] = {{-22, 12}, {-12, 16}, {14, 12}, {22, 4}, {-6, -12}, {16, -12}};
@@ -214,7 +264,7 @@ void drawClouds() {
     }
 }
 
-// --- Rotating Ferris Wheel ---
+// --- Rotating Ferris Wheel (With Internal Angles & Rim Lights) ---
 void drawFerrisWheel() {
     glPushMatrix();
     glTranslatef(-20.0f, 0.0f, -6.0f);
@@ -273,6 +323,7 @@ void drawFerrisWheel() {
         }
         glPopMatrix();
 
+        // Internal Diagonal Bracing Angles
         float nextTheta = (i + 0.5f) * (360.0f / numCabins);
         glPushMatrix();
         glRotatef(nextTheta, 0, 0, 1);
@@ -597,7 +648,6 @@ void display() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glLoadIdentity();
 
-    // Camera positioned higher up and looking further into the upper sky / background
     gluLookAt(camX, camY, camZ, 0.0f, 6.0f, -12.0f, 0.0f, 1.0f, 0.0f);
 
     drawSkyDome();
@@ -611,7 +661,7 @@ void display() {
     glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuse);
     glLightfv(GL_LIGHT0, GL_AMBIENT, ambient);
 
-    drawGroundAndPlaza();
+    drawGroundAndCity();
     drawCelestialBody();
     drawClouds();
     drawFerrisWheel();
@@ -692,7 +742,7 @@ int main(int argc, char** argv) {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
     glutInitWindowSize(1280, 800);
-    glutCreateWindow("3D Amusement Park - Static View (Sky Focused)");
+    glutCreateWindow("3D Amusement Park - Static Sky-Focused & City Skyline");
 
     initScene();
 
