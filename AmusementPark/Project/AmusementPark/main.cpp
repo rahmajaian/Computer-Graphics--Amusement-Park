@@ -8,13 +8,12 @@
 #endif
 
 // --- Global State & Animation Variables ---
-bool isNight = false;
+bool isSunset = false; // Evening Sunset Mode toggle
 bool isPaused = false;
 float globalTime = 0.0f;
 
-// Camera Controls (Grounded perspective looking across the plaza)
-float camX = 4.0f, camY = 6.0f, camZ = 38.0f;
-float camAngleY = -0.08f;
+// Static Fixed Camera Position (Higher up to show more sky)
+float camX = 0.0f, camY = 19.0f, camZ = 48.0f;
 
 // Animation States
 float ferrisAngle = 0.0f;
@@ -22,7 +21,6 @@ float coasterProgress = 0.0f;
 float hotAirY = 18.0f, hotAirX = 22.0f;
 float sunPulse = 0.0f;
 float birdWingAngle = 0.0f;
-float limbSwing = 0.0f;
 
 struct Balloon {
     float x, y, z;
@@ -44,7 +42,7 @@ struct Bird {
 };
 std::vector<Bird> birds;
 
-// --- 3D Vertical Loop Roller Coaster Track Function ---
+// Roller Coaster Track Function
 void getCoasterPoint(float t, float &x, float &y, float &z) {
     float angle = t;
     float radiusX = 24.0f;
@@ -64,7 +62,6 @@ void getCoasterPoint(float t, float &x, float &y, float &z) {
     }
 }
 
-// --- Scene Initialization ---
 void initScene() {
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_LIGHTING);
@@ -110,20 +107,40 @@ void initScene() {
     }
 }
 
-// --- 1. Ground, Horizon, Mountains & Perimeter Treeline ---
-void drawGroundAndHorizon() {
-    // Massive Extended Ground Plane (No floating illusion)
-    glColor3f(isNight ? 0.04f : 0.16f, isNight ? 0.15f : 0.52f, isNight ? 0.04f : 0.18f);
+// --- Static Surrounding Sky Dome ---
+void drawSkyDome() {
+    glPushMatrix();
+    glTranslatef(camX, camY, camZ);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_LIGHTING);
+
+    if (!isSunset) {
+        glColor3f(0.52f, 0.78f, 0.96f); // Daytime Blue Sky
+    } else {
+        glColor3f(0.92f, 0.48f, 0.28f); // Evening Sunset Sky
+    }
+
+    glutSolidSphere(180.0, 30, 30);
+
+    glEnable(GL_LIGHTING);
+    glDepthMask(GL_TRUE);
+    glPopMatrix();
+}
+
+// --- Ground & Street Lamps ---
+void drawGroundAndPlaza() {
+    // Grass
+    glColor3f(isSunset ? 0.08f : 0.18f, isSunset ? 0.18f : 0.55f, isSunset ? 0.04f : 0.20f);
     glBegin(GL_QUADS);
     glNormal3f(0, 1, 0);
-    glVertex3f(-150, 0, -150);
-    glVertex3f(150, 0, -150);
-    glVertex3f(150, 0, 150);
-    glVertex3f(-150, 0, 150);
+    glVertex3f(-70, 0, -70);
+    glVertex3f(70, 0, -70);
+    glVertex3f(70, 0, 70);
+    glVertex3f(-70, 0, 70);
     glEnd();
 
     // Cobblestone Plaza
-    glColor3f(isNight ? 0.22f : 0.58f, isNight ? 0.20f : 0.52f, isNight ? 0.22f : 0.48f);
+    glColor3f(isSunset ? 0.28f : 0.58f, isSunset ? 0.24f : 0.52f, isSunset ? 0.22f : 0.48f);
     glBegin(GL_QUADS);
     glNormal3f(0, 1, 0);
     glVertex3f(-34, 0.03f, -14);
@@ -132,77 +149,25 @@ void drawGroundAndHorizon() {
     glVertex3f(-34, 0.03f, 26);
     glEnd();
 
-    // Distant Rolling Hills / Mountain Backdrop (Anchoring the Horizon)
-    glColor3f(isNight ? 0.08f : 0.22f, isNight ? 0.18f : 0.42f, isNight ? 0.12f : 0.25f);
-    glBegin(GL_TRIANGLE_STRIP);
-    for (int x = -120; x <= 120; x += 20) {
-        float h1 = 8.0f + 6.0f * sin(x * 0.05f) + 4.0f * cos(x * 0.1f);
-        float h2 = 6.0f + 5.0f * cos((x + 20) * 0.05f);
-        glVertex3f((float)x, 0.0f, -65.0f);
-        glVertex3f((float)x, h1, -65.0f);
-        glVertex3f((float)(x + 20), h2, -65.0f);
-    }
-    glEnd();
-
-    // Thick Perimeter Forest / Treeline enclosing the park
-    for (int x = -100; x <= 100; x += 12) {
-        glPushMatrix();
-        glTranslatef((float)x, 0, -55.0f);
-        glColor3f(isNight ? 0.03f : 0.10f, isNight ? 0.20f : 0.45f, isNight ? 0.05f : 0.15f);
-        glRotatef(-90, 1, 0, 0);
-        glutSolidCone(3.5, 9.0, 8, 2);
-        glPopMatrix();
-    }
-
-    // Elevated Stone Balustrade (Foreground Right)
-    glPushMatrix();
-    glTranslatef(16.0f, 0.0f, 21.0f);
-    glRotatef(-22.0f, 0, 1, 0);
-    glColor3f(isNight ? 0.3f : 0.78f, isNight ? 0.28f : 0.74f, isNight ? 0.3f : 0.68f);
-
-    glPushMatrix();
-    glTranslatef(0, 0.3f, 0);
-    glScalef(22.0f, 0.6f, 0.8f);
-    glutSolidCube(1.0f);
-    glPopMatrix();
-
-    glPushMatrix();
-    glTranslatef(0, 1.8f, 0);
-    glScalef(22.0f, 0.25f, 0.9f);
-    glutSolidCube(1.0f);
-    glPopMatrix();
-
-    for (float bx = -10.0f; bx <= 10.0f; bx += 1.2f) {
-        glPushMatrix();
-        glTranslatef(bx, 1.05f, 0);
-        glScalef(0.22f, 1.3f, 0.22f);
-        glutSolidCube(1.0f);
-        glPopMatrix();
-    }
-    glPopMatrix();
-
-    // Street Lamps
+    // Street Lamps with Warm Evening Glow
     float lampCoords[][2] = {{-22, 12}, {-12, 16}, {14, 12}, {22, 4}, {-6, -12}, {16, -12}};
     for (int i = 0; i < 6; i++) {
         glPushMatrix();
         glTranslatef(lampCoords[i][0], 0, lampCoords[i][1]);
 
-        glColor3f(0.15f, 0.18f, 0.20f);
+        glColor3f(0.12f, 0.15f, 0.18f);
         glPushMatrix();
         glRotatef(-90, 1, 0, 0);
         glutSolidCylinder(0.12, 3.8, 10, 2);
         glPopMatrix();
 
-        float pulse = 0.6f + 0.4f * sin(globalTime * 3.5f + i);
-        float r = (i % 2 == 0) ? 1.0f : 0.3f;
-        float g = 0.85f;
-        float b = (i % 2 == 0) ? 0.3f : 1.0f;
-
-        GLfloat emit[] = {r * pulse, g * pulse, b * pulse, 1.0f};
+        float pulse = 0.7f + 0.3f * sin(globalTime * 4.0f + i);
+        float intensity = isSunset ? 1.4f : 0.5f;
+        GLfloat emit[] = {1.0f * intensity * pulse, 0.85f * intensity * pulse, 0.4f * intensity * pulse, 1.0f};
         glMaterialfv(GL_FRONT, GL_EMISSION, emit);
-        glColor3f(r, g, b);
+        glColor3f(1.0f, 0.95f, 0.5f);
         glTranslatef(0, 4.0f, 0);
-        glutSolidSphere(0.38, 14, 14);
+        glutSolidSphere(0.4f, 14, 14);
 
         GLfloat noEmit[] = {0, 0, 0, 1};
         glMaterialfv(GL_FRONT, GL_EMISSION, noEmit);
@@ -210,22 +175,22 @@ void drawGroundAndHorizon() {
     }
 }
 
-// --- 2. Sun / Moon & Brightness Effect ---
+// --- Sun ---
 void drawCelestialBody() {
     glPushMatrix();
     glTranslatef(4.0f, 32.0f, -50.0f);
     float brightness = 0.75f + 0.25f * sin(sunPulse);
 
-    if (!isNight) {
+    if (!isSunset) {
         GLfloat sunEmit[] = {1.0f * brightness, 0.90f * brightness, 0.35f * brightness, 1.0f};
         glMaterialfv(GL_FRONT, GL_EMISSION, sunEmit);
         glColor3f(1.0f, 0.95f * brightness, 0.4f);
-        glutSolidSphere(3.4f + 0.25f * sin(sunPulse), 24, 24);
+        glutSolidSphere(3.4f, 24, 24);
     } else {
-        GLfloat moonEmit[] = {0.75f, 0.80f, 0.95f, 1.0f};
-        glMaterialfv(GL_FRONT, GL_EMISSION, moonEmit);
-        glColor3f(0.88f, 0.90f, 0.98f);
-        glutSolidSphere(2.7f, 24, 24);
+        GLfloat sunsetEmit[] = {1.2f, 0.55f, 0.15f, 1.0f};
+        glMaterialfv(GL_FRONT, GL_EMISSION, sunsetEmit);
+        glColor3f(1.0f, 0.48f, 0.12f);
+        glutSolidSphere(3.8f, 24, 24);
     }
 
     GLfloat noEmit[] = {0, 0, 0, 1};
@@ -233,9 +198,9 @@ void drawCelestialBody() {
     glPopMatrix();
 }
 
-// --- 3. Moving Clouds ---
+// --- Clouds ---
 void drawClouds() {
-    glColor3f(isNight ? 0.30f : 0.98f, isNight ? 0.33f : 0.95f, isNight ? 0.42f : 0.92f);
+    glColor3f(isSunset ? 0.98f : 0.98f, isSunset ? 0.65f : 0.95f, isSunset ? 0.52f : 0.92f);
     for (const auto& c : clouds) {
         glPushMatrix();
         glTranslatef(c.x, c.y, c.z);
@@ -249,7 +214,7 @@ void drawClouds() {
     }
 }
 
-// --- 4. Rotating Ferris Wheel (Left Side) ---
+// --- Rotating Ferris Wheel ---
 void drawFerrisWheel() {
     glPushMatrix();
     glTranslatef(-20.0f, 0.0f, -6.0f);
@@ -258,6 +223,7 @@ void drawFerrisWheel() {
     float hubY = 13.5f;
     float radius = 9.5f;
 
+    // Support Legs
     glColor3f(0.12f, 0.55f, 0.62f);
     for (int zSide = -1; zSide <= 1; zSide += 2) {
         for (int xSide = -1; xSide <= 1; xSide += 2) {
@@ -270,12 +236,14 @@ void drawFerrisWheel() {
         }
     }
 
+    // Hub Axle
     glPushMatrix();
     glTranslatef(0, hubY, -2.5f);
     glColor3f(0.95f, 0.82f, 0.2f);
     glutSolidCylinder(0.45, 5.0, 16, 2);
     glPopMatrix();
 
+    // Rotating Wheel Assembly
     glPushMatrix();
     glTranslatef(0, hubY, 0);
     glRotatef(ferrisAngle, 0, 0, 1);
@@ -305,6 +273,30 @@ void drawFerrisWheel() {
         }
         glPopMatrix();
 
+        float nextTheta = (i + 0.5f) * (360.0f / numCabins);
+        glPushMatrix();
+        glRotatef(nextTheta, 0, 0, 1);
+        glColor3f(0.85f, 0.72f, 0.15f);
+        glPushMatrix();
+        glTranslatef(0, 0, 0);
+        glRotatef(90, 0, 1, 0);
+        glutSolidCylinder(0.05, radius * 0.7f, 6, 2);
+        glPopMatrix();
+        glPopMatrix();
+
+        if (isSunset) {
+            float flicker = 0.6f + 0.4f * sin(globalTime * 6.0f + i);
+            GLfloat rimEmit[] = {1.0f * flicker, 0.6f * flicker, 0.2f * flicker, 1.0f};
+            glMaterialfv(GL_FRONT, GL_EMISSION, rimEmit);
+            glColor3f(1.0f, 0.7f, 0.3f);
+            glPushMatrix();
+            glTranslatef(radius * cos(rad), radius * sin(rad), 0);
+            glutSolidSphere(0.25, 10, 10);
+            glPopMatrix();
+            GLfloat noEmit[] = {0,0,0,1};
+            glMaterialfv(GL_FRONT, GL_EMISSION, noEmit);
+        }
+
         float cx = radius * cos(rad);
         float cy = radius * sin(rad);
 
@@ -326,7 +318,7 @@ void drawFerrisWheel() {
     glPopMatrix();
 }
 
-// --- 5. Circus Tent with Flickering Lights (Center-Right) ---
+// --- Circus Tent ---
 void drawCircusTent() {
     glPushMatrix();
     glTranslatef(6.0f, 0.0f, 1.0f);
@@ -360,8 +352,9 @@ void drawCircusTent() {
         glVertex3f((radius + 0.45f) * cos(a2), wallH, (radius + 0.45f) * sin(a2));
         glEnd();
 
+        float lightMult = isSunset ? 1.6f : 0.8f;
         float flicker = 0.6f + 0.4f * sin(globalTime * 7.0f + i * 1.4f);
-        GLfloat emit[] = {1.0f * flicker, 0.82f * flicker, 0.25f * flicker, 1.0f};
+        GLfloat emit[] = {1.0f * lightMult * flicker, 0.82f * lightMult * flicker, 0.25f * lightMult * flicker, 1.0f};
         glMaterialfv(GL_FRONT, GL_EMISSION, emit);
         glColor3f(1.0f, 0.88f, 0.35f);
         glPushMatrix();
@@ -385,7 +378,7 @@ void drawCircusTent() {
     glPopMatrix();
 }
 
-// --- 6. Ice Cream Stand & Vendor (Foreground Left) ---
+// --- Ice Cream Stand ---
 void drawIceCreamStand() {
     glPushMatrix();
     glTranslatef(-8.5f, 0.0f, 9.0f);
@@ -436,16 +429,10 @@ void drawIceCreamStand() {
     glutSolidSphere(0.48, 12, 12);
     glPopMatrix();
 
-    glPushMatrix();
-    glTranslatef(0.0f, 1.7f, 0.7f);
-    glColor3f(0.95f, 0.80f, 0.68f);
-    glutSolidSphere(0.32, 12, 12);
-    glPopMatrix();
-
     glPopMatrix();
 }
 
-// --- 7. Moving Roller Coaster with Loop (Background) ---
+// --- Roller Coaster ---
 void drawRollerCoaster() {
     int segments = 120;
     float step = (2.0f * M_PI) / segments;
@@ -498,80 +485,7 @@ void drawRollerCoaster() {
     }
 }
 
-// --- 8. Animated Juggling Clown (Foreground Center) ---
-void drawClowns() {
-    glPushMatrix();
-    glTranslatef(-2.0f, 0.0f, 13.5f);
-
-    float swing = sin(limbSwing) * 28.0f;
-
-    for (int side = -1; side <= 1; side += 2) {
-        glPushMatrix();
-        glTranslatef(side * 0.24f, 1.1f, 0);
-        glRotatef(side * swing * 0.5f, 1, 0, 0);
-        glColor3f(0.18f, 0.72f, 0.35f);
-        glTranslatef(0, -0.55f, 0);
-        glScalef(0.26f, 1.1f, 0.26f);
-        glutSolidCube(1.0f);
-
-        glColor3f(0.55f, 0.20f, 0.78f);
-        glTranslatef(0, -0.5f, 0.28f);
-        glScalef(1.3f, 0.35f, 1.9f);
-        glutSolidCube(1.0f);
-        glPopMatrix();
-    }
-
-    glPushMatrix();
-    glTranslatef(0, 1.8f, 0);
-    glColor3f(0.52f, 0.22f, 0.72f);
-    glScalef(0.88f, 1.25f, 0.52f);
-    glutSolidCube(1.0f);
-    glPopMatrix();
-
-    for (int side = -1; side <= 1; side += 2) {
-        glPushMatrix();
-        glTranslatef(side * 0.58f, 2.25f, 0);
-        glRotatef(-45.0f + side * swing, 1, 0, 0);
-        glRotatef(side * 25.0f, 0, 0, 1);
-        glColor3f(0.52f, 0.22f, 0.72f);
-        glTranslatef(0, -0.45f, 0);
-        glScalef(0.22f, 0.9f, 0.22f);
-        glutSolidCube(1.0f);
-        glPopMatrix();
-    }
-
-    glPushMatrix();
-    glTranslatef(0, 2.8f, 0);
-    glColor3f(1.0f, 0.92f, 0.86f);
-    glutSolidSphere(0.40, 16, 16);
-
-    glColor3f(0.95f, 0.15f, 0.15f);
-    glTranslatef(0, 0, 0.40f);
-    glutSolidSphere(0.11, 10, 10);
-
-    glColor3f(0.15f, 0.75f, 0.28f);
-    glTranslatef(-0.38f, 0.15f, -0.35f);
-    glutSolidSphere(0.22, 10, 10);
-    glTranslatef(0.76f, 0, 0);
-    glutSolidSphere(0.22, 10, 10);
-    glPopMatrix();
-
-    float ballColors[3][3] = {{1,0.2,0.4}, {0.2,0.9,0.4}, {0.2,0.6,1.0}};
-    for (int b = 0; b < 3; b++) {
-        float phase = globalTime * 4.5f + b * (2.0f * M_PI / 3.0f);
-        float bx = 0.85f * cos(phase);
-        float by = 3.2f + 0.95f * fabs(sin(phase));
-        glPushMatrix();
-        glTranslatef(bx, by, 0.4f);
-        glColor3f(ballColors[b][0], ballColors[b][1], ballColors[b][2]);
-        glutSolidSphere(0.14, 10, 10);
-        glPopMatrix();
-    }
-
-    glPopMatrix();
-}
-
-// --- 9. Rising Hot Air Balloon (Upper Sky) ---
+// --- Hot Air Balloon ---
 void drawHotAirBalloon() {
     glPushMatrix();
     glTranslatef(hotAirX, hotAirY, -14.0f);
@@ -600,7 +514,7 @@ void drawHotAirBalloon() {
     glPopMatrix();
 }
 
-// --- 10. Floating Balloons ---
+// --- Floating Balloons ---
 void drawFloatingBalloons() {
     for (const auto& b : floatingBalloons) {
         glPushMatrix();
@@ -619,7 +533,7 @@ void drawFloatingBalloons() {
     }
 }
 
-// --- 11. Trees & Flowerbeds ---
+// --- Vegetation ---
 void drawVegetation() {
     float treePos[][2] = {
         {-30, -18}, {-28, 6}, {-25, 18}, {28, -16}, {30, 8}, {-8, -22}, {12, -22}, {22, -22}
@@ -634,7 +548,7 @@ void drawVegetation() {
         glutSolidCylinder(0.38, 3.2, 10, 2);
         glPopMatrix();
 
-        glColor3f(isNight ? 0.05f : 0.18f, isNight ? 0.28f : 0.60f, isNight ? 0.08f : 0.22f);
+        glColor3f(isSunset ? 0.08f : 0.18f, isSunset ? 0.25f : 0.60f, isSunset ? 0.05f : 0.22f);
         glTranslatef(0, 3.8f, 0);
         glutSolidSphere(2.1, 14, 14);
         glTranslatef(0, 1.3f, 0);
@@ -655,7 +569,7 @@ void drawVegetation() {
     }
 }
 
-// --- 12. Moving Birds ---
+// --- Birds ---
 void drawBirds() {
     glColor3f(0.2f, 0.2f, 0.25f);
     for (const auto& bd : birds) {
@@ -677,39 +591,33 @@ void drawBirds() {
     }
 }
 
-// --- Main Display ---
+// --- Main Display (Static High Angle View Showing More Sky) ---
 void display() {
-    float dayShift = 0.06f * sin(sunPulse);
-    if (!isNight) {
-        glClearColor(0.52f + dayShift, 0.78f + dayShift, 0.96f, 1.0f);
-    } else {
-        glClearColor(0.04f, 0.05f, 0.14f, 1.0f);
-    }
-
+    glClearColor(0.02f, 0.02f, 0.05f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glLoadIdentity();
 
-    float lookX = camX + sin(camAngleY);
-    float lookZ = camZ - cos(camAngleY);
-    gluLookAt(camX, camY, camZ, lookX, camY - 0.25f, lookZ, 0.0f, 1.0f, 0.0f);
+    // Camera positioned higher up and looking further into the upper sky / background
+    gluLookAt(camX, camY, camZ, 0.0f, 6.0f, -12.0f, 0.0f, 1.0f, 0.0f);
+
+    drawSkyDome();
 
     GLfloat lightPos[] = {4.0f, 32.0f, -50.0f, 1.0f};
-    float sunIntensity = isNight ? 0.25f : (0.90f + 0.10f * sin(sunPulse));
-    GLfloat diffuse[] = {sunIntensity, sunIntensity * 0.95f, isNight ? 0.45f : sunIntensity * 0.88f, 1.0f};
-    GLfloat ambient[] = {isNight ? 0.15f : 0.38f, isNight ? 0.15f : 0.36f, isNight ? 0.25f : 0.36f, 1.0f};
+    float sunIntensity = isSunset ? 1.1f : 0.90f;
+    GLfloat diffuse[] = {sunIntensity, sunIntensity * 0.80f, isSunset ? 0.5f : sunIntensity * 0.88f, 1.0f};
+    GLfloat ambient[] = {isSunset ? 0.35f : 0.38f, isSunset ? 0.25f : 0.36f, isSunset ? 0.22f : 0.36f, 1.0f};
 
     glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
     glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuse);
     glLightfv(GL_LIGHT0, GL_AMBIENT, ambient);
 
-    drawGroundAndHorizon();
+    drawGroundAndPlaza();
     drawCelestialBody();
     drawClouds();
     drawFerrisWheel();
     drawCircusTent();
     drawIceCreamStand();
     drawRollerCoaster();
-    drawClowns();
     drawHotAirBalloon();
     drawFloatingBalloons();
     drawVegetation();
@@ -718,7 +626,7 @@ void display() {
     glutSwapBuffers();
 }
 
-// --- Animation Timer (~60 FPS) ---
+// --- Animation Timer ---
 void update(int value) {
     if (!isPaused) {
         globalTime += 0.016f;
@@ -730,7 +638,6 @@ void update(int value) {
 
         sunPulse += 0.02f;
         birdWingAngle = 35.0f * sin(globalTime * 10.0f);
-        limbSwing += 0.08f;
 
         hotAirY += 0.018f;
         hotAirX += 0.012f * sin(globalTime * 0.5f);
@@ -765,40 +672,27 @@ void reshape(int w, int h) {
     glViewport(0, 0, w, h);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(48.0, (double)w / (double)h, 1.0, 220.0);
+    gluPerspective(48.0, (double)w / (double)h, 1.0, 250.0);
     glMatrixMode(GL_MODELVIEW);
 }
 
 void keyboard(unsigned char key, int x, int y) {
-    float moveSpeed = 1.2f;
     switch (key) {
-        case 'n': case 'N': isNight = !isNight; break;
+        case 'n': case 'N': isSunset = !isSunset; break; // Toggle Evening Sunset Mode
         case ' ': isPaused = !isPaused; break;
-        case 'w': case 'W': camX += sin(camAngleY) * moveSpeed; camZ -= cos(camAngleY) * moveSpeed; break;
-        case 's': case 'S': camX -= sin(camAngleY) * moveSpeed; camZ += cos(camAngleY) * moveSpeed; break;
-        case 'a': case 'A': camAngleY -= 0.06f; break;
-        case 'd': case 'D': camAngleY += 0.06f; break;
-        case 'q': case 'Q': camY += 0.8f; break;
-        case 'e': case 'E': if (camY > 2.0f) camY -= 0.8f; break;
         case 27: exit(0); break;
     }
 }
 
 void specialKeys(int key, int x, int y) {
-    float moveSpeed = 1.2f;
-    switch (key) {
-        case GLUT_KEY_UP: camX += sin(camAngleY) * moveSpeed; camZ -= cos(camAngleY) * moveSpeed; break;
-        case GLUT_KEY_DOWN: camX -= sin(camAngleY) * moveSpeed; camZ += cos(camAngleY) * moveSpeed; break;
-        case GLUT_KEY_LEFT: camAngleY -= 0.06f; break;
-        case GLUT_KEY_RIGHT: camAngleY += 0.06f; break;
-    }
+    // Static screen view
 }
 
 int main(int argc, char** argv) {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
     glutInitWindowSize(1280, 800);
-    glutCreateWindow("3D Grounded Amusement Park - OpenGL / FreeGLUT");
+    glutCreateWindow("3D Amusement Park - Static View (Sky Focused)");
 
     initScene();
 
