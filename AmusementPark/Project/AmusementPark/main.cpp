@@ -12,13 +12,12 @@ bool isNight = false;
 bool isPaused = false;
 float globalTime = 0.0f;
 
-// Camera Controls (Positioned to match the elevated 3/4 view)
-float camX = 4.0f, camY = 14.0f, camZ = 44.0f;
+// Camera Controls (Grounded perspective looking across the plaza)
+float camX = 4.0f, camY = 6.0f, camZ = 38.0f;
 float camAngleY = -0.08f;
 
-// Feature Animation States
+// Animation States
 float ferrisAngle = 0.0f;
-float carouselAngle = 0.0f;
 float coasterProgress = 0.0f;
 float hotAirY = 18.0f, hotAirX = 22.0f;
 float sunPulse = 0.0f;
@@ -45,9 +44,8 @@ struct Bird {
 };
 std::vector<Bird> birds;
 
-// --- 3D Vertical Loop Roller Coaster Track Parametric Function ---
+// --- 3D Vertical Loop Roller Coaster Track Function ---
 void getCoasterPoint(float t, float &x, float &y, float &z) {
-    // t goes from 0 to 2*PI around the park background
     float angle = t;
     float radiusX = 24.0f;
     float radiusZ = 12.0f;
@@ -56,7 +54,6 @@ void getCoasterPoint(float t, float &x, float &y, float &z) {
     z = -16.0f + radiusZ * sin(angle);
     y = 4.5f + 2.5f * sin(2.0f * angle);
 
-    // Add a dramatic vertical loop near the upper-right back section (around angle = 1.1 rad)
     float loopCenter = 1.15f;
     float dist = angle - loopCenter;
     if (dist > -0.6f && dist < 0.6f) {
@@ -76,7 +73,7 @@ void initScene() {
     glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
     glEnable(GL_NORMALIZE);
 
-    // Floating Balloons (Red, Teal, Gold, Pink, Purple)
+    // Floating Balloons
     float colors[5][3] = {{1.0f,0.25f,0.3f}, {0.2f,0.8f,0.95f}, {1.0f,0.82f,0.15f}, {0.95f,0.45f,0.75f}, {0.6f,0.35f,0.95f}};
     for (int i = 0; i < 15; i++) {
         Balloon b;
@@ -91,7 +88,7 @@ void initScene() {
         floatingBalloons.push_back(b);
     }
 
-    // Fluffy Clouds
+    // Clouds
     for (int i = 0; i < 7; i++) {
         Cloud c;
         c.x = -45.0f + i * 15.0f;
@@ -102,7 +99,7 @@ void initScene() {
         clouds.push_back(c);
     }
 
-    // Flying Birds
+    // Birds
     for (int i = 0; i < 6; i++) {
         Bird bd;
         bd.x = -34.0f + i * 12.0f;
@@ -113,19 +110,19 @@ void initScene() {
     }
 }
 
-// --- 1. Ground, Cobblestone Plaza, Elevated Railing & Decorative Lights ---
-void drawGroundAndPlaza() {
-    // Lush Park Grass
-    glColor3f(isNight ? 0.04f : 0.18f, isNight ? 0.18f : 0.55f, isNight ? 0.05f : 0.20f);
+// --- 1. Ground, Horizon, Mountains & Perimeter Treeline ---
+void drawGroundAndHorizon() {
+    // Massive Extended Ground Plane (No floating illusion)
+    glColor3f(isNight ? 0.04f : 0.16f, isNight ? 0.15f : 0.52f, isNight ? 0.04f : 0.18f);
     glBegin(GL_QUADS);
     glNormal3f(0, 1, 0);
-    glVertex3f(-70, 0, -70);
-    glVertex3f(70, 0, -70);
-    glVertex3f(70, 0, 70);
-    glVertex3f(-70, 0, 70);
+    glVertex3f(-150, 0, -150);
+    glVertex3f(150, 0, -150);
+    glVertex3f(150, 0, 150);
+    glVertex3f(-150, 0, 150);
     glEnd();
 
-    // Warm Cobblestone Plaza Floor
+    // Cobblestone Plaza
     glColor3f(isNight ? 0.22f : 0.58f, isNight ? 0.20f : 0.52f, isNight ? 0.22f : 0.48f);
     glBegin(GL_QUADS);
     glNormal3f(0, 1, 0);
@@ -135,13 +132,34 @@ void drawGroundAndPlaza() {
     glVertex3f(-34, 0.03f, 26);
     glEnd();
 
-    // Elevated Stone Balustrade / Overlook Railing (Foreground Right)
+    // Distant Rolling Hills / Mountain Backdrop (Anchoring the Horizon)
+    glColor3f(isNight ? 0.08f : 0.22f, isNight ? 0.18f : 0.42f, isNight ? 0.12f : 0.25f);
+    glBegin(GL_TRIANGLE_STRIP);
+    for (int x = -120; x <= 120; x += 20) {
+        float h1 = 8.0f + 6.0f * sin(x * 0.05f) + 4.0f * cos(x * 0.1f);
+        float h2 = 6.0f + 5.0f * cos((x + 20) * 0.05f);
+        glVertex3f((float)x, 0.0f, -65.0f);
+        glVertex3f((float)x, h1, -65.0f);
+        glVertex3f((float)(x + 20), h2, -65.0f);
+    }
+    glEnd();
+
+    // Thick Perimeter Forest / Treeline enclosing the park
+    for (int x = -100; x <= 100; x += 12) {
+        glPushMatrix();
+        glTranslatef((float)x, 0, -55.0f);
+        glColor3f(isNight ? 0.03f : 0.10f, isNight ? 0.20f : 0.45f, isNight ? 0.05f : 0.15f);
+        glRotatef(-90, 1, 0, 0);
+        glutSolidCone(3.5, 9.0, 8, 2);
+        glPopMatrix();
+    }
+
+    // Elevated Stone Balustrade (Foreground Right)
     glPushMatrix();
     glTranslatef(16.0f, 0.0f, 21.0f);
     glRotatef(-22.0f, 0, 1, 0);
     glColor3f(isNight ? 0.3f : 0.78f, isNight ? 0.28f : 0.74f, isNight ? 0.3f : 0.68f);
 
-    // Base & Top Rail
     glPushMatrix();
     glTranslatef(0, 0.3f, 0);
     glScalef(22.0f, 0.6f, 0.8f);
@@ -154,7 +172,6 @@ void drawGroundAndPlaza() {
     glutSolidCube(1.0f);
     glPopMatrix();
 
-    // Balusters
     for (float bx = -10.0f; bx <= 10.0f; bx += 1.2f) {
         glPushMatrix();
         glTranslatef(bx, 1.05f, 0);
@@ -164,20 +181,18 @@ void drawGroundAndPlaza() {
     }
     glPopMatrix();
 
-    // Animated Decorative Street Lamps around the Plaza
+    // Street Lamps
     float lampCoords[][2] = {{-22, 12}, {-12, 16}, {14, 12}, {22, 4}, {-6, -12}, {16, -12}};
     for (int i = 0; i < 6; i++) {
         glPushMatrix();
         glTranslatef(lampCoords[i][0], 0, lampCoords[i][1]);
 
-        // Iron Post
         glColor3f(0.15f, 0.18f, 0.20f);
         glPushMatrix();
         glRotatef(-90, 1, 0, 0);
         glutSolidCylinder(0.12, 3.8, 10, 2);
         glPopMatrix();
 
-        // Periodically Changing Glowing Lantern
         float pulse = 0.6f + 0.4f * sin(globalTime * 3.5f + i);
         float r = (i % 2 == 0) ? 1.0f : 0.3f;
         float g = 0.85f;
@@ -195,7 +210,7 @@ void drawGroundAndPlaza() {
     }
 }
 
-// --- 2. Animated Sun / Moon with Brightness Effect ---
+// --- 2. Sun / Moon & Brightness Effect ---
 void drawCelestialBody() {
     glPushMatrix();
     glTranslatef(4.0f, 32.0f, -50.0f);
@@ -234,7 +249,7 @@ void drawClouds() {
     }
 }
 
-// --- 4. Rotating Ferris Wheel (Left Side - Gold & Teal with Upright Cabins) ---
+// --- 4. Rotating Ferris Wheel (Left Side) ---
 void drawFerrisWheel() {
     glPushMatrix();
     glTranslatef(-20.0f, 0.0f, -6.0f);
@@ -243,7 +258,6 @@ void drawFerrisWheel() {
     float hubY = 13.5f;
     float radius = 9.5f;
 
-    // Teal A-Frame Support Legs
     glColor3f(0.12f, 0.55f, 0.62f);
     for (int zSide = -1; zSide <= 1; zSide += 2) {
         for (int xSide = -1; xSide <= 1; xSide += 2) {
@@ -256,19 +270,16 @@ void drawFerrisWheel() {
         }
     }
 
-    // Hub Axle
     glPushMatrix();
     glTranslatef(0, hubY, -2.5f);
     glColor3f(0.95f, 0.82f, 0.2f);
     glutSolidCylinder(0.45, 5.0, 16, 2);
     glPopMatrix();
 
-    // Rotating Wheel
     glPushMatrix();
     glTranslatef(0, hubY, 0);
     glRotatef(ferrisAngle, 0, 0, 1);
 
-    // Golden Rims
     glColor3f(0.95f, 0.80f, 0.22f);
     for (int zRim = -1; zRim <= 1; zRim += 2) {
         glPushMatrix();
@@ -277,13 +288,11 @@ void drawFerrisWheel() {
         glPopMatrix();
     }
 
-    // Spokes & Upright Cabins
     int numCabins = 10;
     for (int i = 0; i < numCabins; i++) {
         float theta = i * (360.0f / numCabins);
         float rad = theta * M_PI / 180.0f;
 
-        // Spokes
         glPushMatrix();
         glRotatef(theta, 0, 0, 1);
         glColor3f(0.95f, 0.85f, 0.35f);
@@ -296,20 +305,17 @@ void drawFerrisWheel() {
         }
         glPopMatrix();
 
-        // Upright Passenger Cabin
         float cx = radius * cos(rad);
         float cy = radius * sin(rad);
 
         glPushMatrix();
         glTranslatef(cx, cy, 0);
-        glRotatef(-ferrisAngle, 0, 0, 1); // Keeps cabin level at all angles
+        glRotatef(-ferrisAngle, 0, 0, 1);
 
-        // Gondola Body
         glColor3f((i % 2 == 0) ? 0.15f : 0.95f, (i % 2 == 0) ? 0.65f : 0.78f, (i % 2 == 0) ? 0.72f : 0.22f);
         glTranslatef(0, -1.1f, 0);
         glutSolidCube(1.6f);
 
-        // Cabin Roof
         glColor3f(0.98f, 0.95f, 0.88f);
         glTranslatef(0, 1.0f, 0);
         glRotatef(-90, 1, 0, 0);
@@ -320,7 +326,7 @@ void drawFerrisWheel() {
     glPopMatrix();
 }
 
-// --- 5. Grand Teal & Cream Striped Circus Tent (Center-Right) ---
+// --- 5. Circus Tent with Flickering Lights (Center-Right) ---
 void drawCircusTent() {
     glPushMatrix();
     glTranslatef(6.0f, 0.0f, 1.0f);
@@ -330,16 +336,13 @@ void drawCircusTent() {
     float wallH = 4.6f;
     float roofH = 6.2f;
 
-    // Striped Cylindrical Walls & Conical Roof
     for (int i = 0; i < slices; i++) {
         float a1 = i * 2.0f * M_PI / slices;
         float a2 = (i + 1) * 2.0f * M_PI / slices;
 
-        // Alternating Teal & Warm Cream Stripes
         if (i % 2 == 0) glColor3f(0.10f, 0.45f, 0.48f);
         else glColor3f(0.96f, 0.92f, 0.82f);
 
-        // Leave entrance opening on the front-left slice
         if (i != 4) {
             glBegin(GL_QUADS);
             glNormal3f(cos(a1), 0, sin(a1));
@@ -350,7 +353,6 @@ void drawCircusTent() {
             glEnd();
         }
 
-        // Conical Roof
         glBegin(GL_TRIANGLES);
         glNormal3f(cos((a1+a2)/2), 0.5f, sin((a1+a2)/2));
         glVertex3f(0, wallH + roofH, 0);
@@ -358,7 +360,6 @@ void drawCircusTent() {
         glVertex3f((radius + 0.45f) * cos(a2), wallH, (radius + 0.45f) * sin(a2));
         glEnd();
 
-        // Warm Flickering Fairy Lights along Scalloped Eaves
         float flicker = 0.6f + 0.4f * sin(globalTime * 7.0f + i * 1.4f);
         GLfloat emit[] = {1.0f * flicker, 0.82f * flicker, 0.25f * flicker, 1.0f};
         glMaterialfv(GL_FRONT, GL_EMISSION, emit);
@@ -372,7 +373,6 @@ void drawCircusTent() {
     GLfloat noEmit[] = {0, 0, 0, 1};
     glMaterialfv(GL_FRONT, GL_EMISSION, noEmit);
 
-    // Golden Spire Finial
     glColor3f(0.95f, 0.78f, 0.20f);
     glPushMatrix();
     glTranslatef(0, wallH + roofH, 0);
@@ -385,13 +385,12 @@ void drawCircusTent() {
     glPopMatrix();
 }
 
-// --- 6. "Scoop's Paradise" Ice Cream Stand & Vendor (Foreground Left) ---
+// --- 6. Ice Cream Stand & Vendor (Foreground Left) ---
 void drawIceCreamStand() {
     glPushMatrix();
     glTranslatef(-8.5f, 0.0f, 9.0f);
     glRotatef(25.0f, 0, 1, 0);
 
-    // Cream & Pastel Pink Kiosk Booth
     glColor3f(0.96f, 0.90f, 0.80f);
     glPushMatrix();
     glTranslatef(0, 1.6f, 0);
@@ -399,7 +398,6 @@ void drawIceCreamStand() {
     glutSolidCube(1.0f);
     glPopMatrix();
 
-    // Pink Counter Trim
     glColor3f(0.92f, 0.52f, 0.62f);
     glPushMatrix();
     glTranslatef(0, 1.4f, 1.25f);
@@ -407,7 +405,6 @@ void drawIceCreamStand() {
     glutSolidCube(1.0f);
     glPopMatrix();
 
-    // Dual Purple Castle Turret Towers on Corners
     for (int side = -1; side <= 1; side += 2) {
         glPushMatrix();
         glTranslatef(side * 1.6f, 0, 1.1f);
@@ -420,7 +417,6 @@ void drawIceCreamStand() {
         glPopMatrix();
     }
 
-    // Giant Decorative Ice Cream Cone & Swirl on Roof
     glPushMatrix();
     glTranslatef(-0.5f, 3.6f, 0.2f);
     glColor3f(1.0f, 0.96f, 0.92f);
@@ -440,17 +436,16 @@ void drawIceCreamStand() {
     glutSolidSphere(0.48, 12, 12);
     glPopMatrix();
 
-    // Animated Ice Cream Vendor inside Serving Window
     glPushMatrix();
     glTranslatef(0.0f, 1.7f, 0.7f);
     glColor3f(0.95f, 0.80f, 0.68f);
-    glutSolidSphere(0.32, 12, 12); // Head
+    glutSolidSphere(0.32, 12, 12);
     glPopMatrix();
 
     glPopMatrix();
 }
 
-// --- 7. Vertical-Looping 3D Roller Coaster (Background) ---
+// --- 7. Moving Roller Coaster with Loop (Background) ---
 void drawRollerCoaster() {
     int segments = 120;
     float step = (2.0f * M_PI) / segments;
@@ -462,7 +457,6 @@ void drawRollerCoaster() {
         getCoasterPoint(t1, x1, y1, z1);
         getCoasterPoint(t2, x2, y2, z2);
 
-        // Teal Coaster Rails
         glColor3f(0.15f, 0.72f, 0.78f);
         glLineWidth(4.5f);
         glBegin(GL_LINES);
@@ -472,7 +466,6 @@ void drawRollerCoaster() {
         glVertex3f(x2 + 0.35f, y2, z2);
         glEnd();
 
-        // Purple Support Pillars
         if (i % 4 == 0 && y1 < 12.0f) {
             glColor3f(0.48f, 0.32f, 0.65f);
             glPushMatrix();
@@ -483,7 +476,6 @@ void drawRollerCoaster() {
         }
     }
 
-    // Multi-Car Coaster Train
     for (int c = 0; c < 5; c++) {
         float carT = coasterProgress - c * 0.14f;
         float cx, cy, cz, nx, ny, nz;
@@ -506,25 +498,22 @@ void drawRollerCoaster() {
     }
 }
 
-// --- 8. Animated Juggling Clown & Joker (Center Foreground) ---
+// --- 8. Animated Juggling Clown (Foreground Center) ---
 void drawClowns() {
-    // Juggling Clown in Purple & Green (Matching Foreground Center)
     glPushMatrix();
     glTranslatef(-2.0f, 0.0f, 13.5f);
 
     float swing = sin(limbSwing) * 28.0f;
 
-    // Legs
     for (int side = -1; side <= 1; side += 2) {
         glPushMatrix();
         glTranslatef(side * 0.24f, 1.1f, 0);
         glRotatef(side * swing * 0.5f, 1, 0, 0);
-        glColor3f(0.18f, 0.72f, 0.35f); // Green plaid pants
+        glColor3f(0.18f, 0.72f, 0.35f);
         glTranslatef(0, -0.55f, 0);
         glScalef(0.26f, 1.1f, 0.26f);
         glutSolidCube(1.0f);
 
-        // Purple Clown Shoes
         glColor3f(0.55f, 0.20f, 0.78f);
         glTranslatef(0, -0.5f, 0.28f);
         glScalef(1.3f, 0.35f, 1.9f);
@@ -532,7 +521,6 @@ void drawClowns() {
         glPopMatrix();
     }
 
-    // Purple Polka-Dot Jacket Torso
     glPushMatrix();
     glTranslatef(0, 1.8f, 0);
     glColor3f(0.52f, 0.22f, 0.72f);
@@ -540,7 +528,6 @@ void drawClowns() {
     glutSolidCube(1.0f);
     glPopMatrix();
 
-    // Animated Juggling Arms
     for (int side = -1; side <= 1; side += 2) {
         glPushMatrix();
         glTranslatef(side * 0.58f, 2.25f, 0);
@@ -553,18 +540,15 @@ void drawClowns() {
         glPopMatrix();
     }
 
-    // Head & Green Curly Hair
     glPushMatrix();
     glTranslatef(0, 2.8f, 0);
     glColor3f(1.0f, 0.92f, 0.86f);
     glutSolidSphere(0.40, 16, 16);
 
-    // Red Nose
     glColor3f(0.95f, 0.15f, 0.15f);
     glTranslatef(0, 0, 0.40f);
     glutSolidSphere(0.11, 10, 10);
 
-    // Green Hair Puffs
     glColor3f(0.15f, 0.75f, 0.28f);
     glTranslatef(-0.38f, 0.15f, -0.35f);
     glutSolidSphere(0.22, 10, 10);
@@ -572,7 +556,6 @@ void drawClowns() {
     glutSolidSphere(0.22, 10, 10);
     glPopMatrix();
 
-    // Animated Juggling Balls in Air
     float ballColors[3][3] = {{1,0.2,0.4}, {0.2,0.9,0.4}, {0.2,0.6,1.0}};
     for (int b = 0; b < 3; b++) {
         float phase = globalTime * 4.5f + b * (2.0f * M_PI / 3.0f);
@@ -588,16 +571,14 @@ void drawClowns() {
     glPopMatrix();
 }
 
-// --- 9. Multi-Colored Hot Air Balloon (Upper Right Sky) ---
+// --- 9. Rising Hot Air Balloon (Upper Sky) ---
 void drawHotAirBalloon() {
     glPushMatrix();
     glTranslatef(hotAirX, hotAirY, -14.0f);
 
-    // Wicker Basket
     glColor3f(0.58f, 0.35f, 0.16f);
     glutSolidCube(1.4f);
 
-    // Suspension Ropes
     glColor3f(0.35f, 0.35f, 0.35f);
     glBegin(GL_LINES);
     for (int x = -1; x <= 1; x += 2) {
@@ -608,12 +589,11 @@ void drawHotAirBalloon() {
     }
     glEnd();
 
-    // Colorful Striped Balloon Envelope
     glTranslatef(0, 4.8f, 0);
-    glColor3f(0.15f, 0.68f, 0.75f); // Teal base
+    glColor3f(0.15f, 0.68f, 0.75f);
     glutSolidSphere(3.1, 20, 20);
 
-    glColor3f(0.96f, 0.52f, 0.15f); // Orange band
+    glColor3f(0.96f, 0.52f, 0.15f);
     glRotatef(90, 1, 0, 0);
     glutSolidTorus(0.45, 2.95, 12, 24);
 
@@ -639,7 +619,7 @@ void drawFloatingBalloons() {
     }
 }
 
-// --- 11. Trees, Shrubs & Flowerbeds ---
+// --- 11. Trees & Flowerbeds ---
 void drawVegetation() {
     float treePos[][2] = {
         {-30, -18}, {-28, 6}, {-25, 18}, {28, -16}, {30, 8}, {-8, -22}, {12, -22}, {22, -22}
@@ -662,7 +642,6 @@ void drawVegetation() {
         glPopMatrix();
     }
 
-    // Colorful Flowerbeds Bordering the Plaza
     for (float fx = -16.0f; fx <= 16.0f; fx += 2.2f) {
         if (fabs(fx) < 4.5f) continue;
         glPushMatrix();
@@ -676,7 +655,7 @@ void drawVegetation() {
     }
 }
 
-// --- 12. Moving Birds with Flapping Wings ---
+// --- 12. Moving Birds ---
 void drawBirds() {
     glColor3f(0.2f, 0.2f, 0.25f);
     for (const auto& bd : birds) {
@@ -698,11 +677,10 @@ void drawBirds() {
     }
 }
 
-// --- Main Display Loop ---
+// --- Main Display ---
 void display() {
     float dayShift = 0.06f * sin(sunPulse);
     if (!isNight) {
-        // Golden-hour warm sky gradient matching the render
         glClearColor(0.52f + dayShift, 0.78f + dayShift, 0.96f, 1.0f);
     } else {
         glClearColor(0.04f, 0.05f, 0.14f, 1.0f);
@@ -724,7 +702,7 @@ void display() {
     glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuse);
     glLightfv(GL_LIGHT0, GL_AMBIENT, ambient);
 
-    drawGroundAndPlaza();
+    drawGroundAndHorizon();
     drawCelestialBody();
     drawClouds();
     drawFerrisWheel();
@@ -754,7 +732,6 @@ void update(int value) {
         birdWingAngle = 35.0f * sin(globalTime * 10.0f);
         limbSwing += 0.08f;
 
-        // Rising & Drifting Hot Air Balloon
         hotAirY += 0.018f;
         hotAirX += 0.012f * sin(globalTime * 0.5f);
         if (hotAirY > 36.0f) hotAirY = 10.0f;
@@ -821,7 +798,7 @@ int main(int argc, char** argv) {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
     glutInitWindowSize(1280, 800);
-    glutCreateWindow("3D Amusement Park - FreeGLUT / Code::Blocks");
+    glutCreateWindow("3D Grounded Amusement Park - OpenGL / FreeGLUT");
 
     initScene();
 
