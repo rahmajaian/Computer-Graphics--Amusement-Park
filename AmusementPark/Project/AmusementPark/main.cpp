@@ -21,6 +21,7 @@ float coasterProgress = 0.0f;
 float hotAirY = 18.0f, hotAirX = 22.0f;
 float sunPulse = 0.0f;
 float birdWingAngle = 0.0f;
+float limbSwing = 0.0f; // For clean, natural arm & leg motion
 
 struct Balloon {
     float x, y, z;
@@ -264,7 +265,7 @@ void drawClouds() {
     }
 }
 
-// --- Rotating Ferris Wheel (With Internal Angles & Rim Lights) ---
+// --- Rotating Ferris Wheel ---
 void drawFerrisWheel() {
     glPushMatrix();
     glTranslatef(-20.0f, 0.0f, -6.0f);
@@ -323,7 +324,6 @@ void drawFerrisWheel() {
         }
         glPopMatrix();
 
-        // Internal Diagonal Bracing Angles
         float nextTheta = (i + 0.5f) * (360.0f / numCabins);
         glPushMatrix();
         glRotatef(nextTheta, 0, 0, 1);
@@ -369,7 +369,7 @@ void drawFerrisWheel() {
     glPopMatrix();
 }
 
-// --- Circus Tent ---
+// --- Circus Tent with Classic Striped Lighting ---
 void drawCircusTent() {
     glPushMatrix();
     glTranslatef(6.0f, 0.0f, 1.0f);
@@ -383,8 +383,9 @@ void drawCircusTent() {
         float a1 = i * 2.0f * M_PI / slices;
         float a2 = (i + 1) * 2.0f * M_PI / slices;
 
-        if (i % 2 == 0) glColor3f(0.10f, 0.45f, 0.48f);
-        else glColor3f(0.96f, 0.92f, 0.82f);
+        // Traditional classic red and white carnival striping
+        if (i % 2 == 0) glColor3f(0.85f, 0.12f, 0.15f); // Red
+        else glColor3f(0.98f, 0.96f, 0.92f);             // Cream/White
 
         if (i != 4) {
             glBegin(GL_QUADS);
@@ -403,6 +404,7 @@ void drawCircusTent() {
         glVertex3f((radius + 0.45f) * cos(a2), wallH, (radius + 0.45f) * sin(a2));
         glEnd();
 
+        // Standard warm festival string lighting along the tent eaves
         float lightMult = isSunset ? 1.6f : 0.8f;
         float flicker = 0.6f + 0.4f * sin(globalTime * 7.0f + i * 1.4f);
         GLfloat emit[] = {1.0f * lightMult * flicker, 0.82f * lightMult * flicker, 0.25f * lightMult * flicker, 1.0f};
@@ -417,6 +419,7 @@ void drawCircusTent() {
     GLfloat noEmit[] = {0, 0, 0, 1};
     glMaterialfv(GL_FRONT, GL_EMISSION, noEmit);
 
+    // Flagpole finial
     glColor3f(0.95f, 0.78f, 0.20f);
     glPushMatrix();
     glTranslatef(0, wallH + roofH, 0);
@@ -424,6 +427,73 @@ void drawCircusTent() {
     glutSolidCylinder(0.12, 2.0, 8, 2);
     glTranslatef(0, 0, 2.0f);
     glutSolidSphere(0.28, 10, 10);
+    glPopMatrix();
+
+    glPopMatrix();
+}
+
+// --- Standard Professional Amusement Park Clown and Joker Characters ---
+void drawClownAndJoker(float x, float z, bool isJoker) {
+    glPushMatrix();
+    glTranslatef(x, 0.0f, z);
+
+    float swing = sin(limbSwing) * 22.0f; // Controlled, natural walking/performing sway
+
+    // Animated Legs with proper rotational transform
+    for (int side = -1; side <= 1; side += 2) {
+        glPushMatrix();
+        glTranslatef(side * 0.22f, 1.1f, 0);
+        glRotatef(side * swing, 1, 0, 0);
+        glColor3f(isJoker ? 0.3f : 0.15f, isJoker ? 0.2f : 0.5f, isJoker ? 0.7f : 0.2f); // Tasteful costume colors
+        glTranslatef(0, -0.55f, 0);
+        glScalef(0.22f, 1.1f, 0.22f);
+        glutSolidCube(1.0f);
+
+        // Classic large performance shoes
+        glColor3f(0.85f, 0.2f, 0.2f);
+        glTranslatef(0, -0.45f, 0.25f);
+        glScalef(1.2f, 0.3f, 1.6f);
+        glutSolidCube(1.0f);
+        glPopMatrix();
+    }
+
+    // Torso / Costume tunic
+    glPushMatrix();
+    glTranslatef(0, 1.75f, 0);
+    glColor3f(isJoker ? 0.25f : 0.9f, isJoker ? 0.7f : 0.3f, isJoker ? 0.8f : 0.3f);
+    glScalef(0.75f, 1.15f, 0.45f);
+    glutSolidCube(1.0f);
+    glPopMatrix();
+
+    // Animated Arms using rotational transformations
+    for (int side = -1; side <= 1; side += 2) {
+        glPushMatrix();
+        glTranslatef(side * 0.52f, 2.2f, 0);
+        glRotatef(-side * swing * 0.8f, 1, 0, 0);
+        glRotatef(side * 15.0f, 0, 0, 1);
+        glColor3f(0.9f, 0.85f, 0.7f);
+        glTranslatef(0, -0.45f, 0);
+        glScalef(0.18f, 0.85f, 0.18f);
+        glutSolidCube(1.0f);
+        glPopMatrix();
+    }
+
+    // Head, hat, and traditional performance features
+    glPushMatrix();
+    glTranslatef(0, 2.65f, 0);
+    glColor3f(0.95f, 0.82f, 0.70f); // Clean skin tone
+    glutSolidSphere(0.35, 14, 14);
+
+    // Classic subtle red nose
+    glColor3f(0.9f, 0.15f, 0.15f);
+    glTranslatef(0, 0, 0.35f);
+    glutSolidSphere(0.09, 8, 8);
+
+    // Performance conical hat / jester cap
+    glTranslatef(0, 0.3f, -0.35f);
+    glColor3f(isJoker ? 0.5f : 0.85f, isJoker ? 0.2f : 0.15f, isJoker ? 0.8f : 0.15f);
+    glRotatef(-90, 1, 0, 0);
+    glutSolidCone(0.32, 0.7, 10, 2);
     glPopMatrix();
 
     glPopMatrix();
@@ -666,6 +736,8 @@ void display() {
     drawClouds();
     drawFerrisWheel();
     drawCircusTent();
+    drawClownAndJoker(-1.5f, 8.0f, false); // Standard Clown near the tent plaza
+    drawClownAndJoker(2.5f, 7.5f, true);   // Standard Joker entertainer
     drawIceCreamStand();
     drawRollerCoaster();
     drawHotAirBalloon();
@@ -688,6 +760,7 @@ void update(int value) {
 
         sunPulse += 0.02f;
         birdWingAngle = 35.0f * sin(globalTime * 10.0f);
+        limbSwing += 0.06f; // Smooth performance motion update
 
         hotAirY += 0.018f;
         hotAirX += 0.012f * sin(globalTime * 0.5f);
@@ -751,7 +824,6 @@ int main(int argc, char** argv) {
     glutKeyboardFunc(keyboard);
     glutSpecialFunc(specialKeys);
     glutTimerFunc(16, update, 0);
-
     glutMainLoop();
     return 0;
 }
