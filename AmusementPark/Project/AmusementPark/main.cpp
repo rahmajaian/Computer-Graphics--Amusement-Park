@@ -7,43 +7,43 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-// ============================================================
-// GLOBAL STATE AND ANIMATION VARIABLES
-// ============================================================
+// --- Global State & Animation Variables ---
 bool isSunset = false;
 bool isPaused = false;
 float globalTime = 0.0f;
 
+// Static Fixed Camera Position
 float camX = 0.0f, camY = 19.0f, camZ = 48.0f;
 
+// Animation States
 float ferrisAngle = 0.0f;
 float coasterProgress = 0.0f;
 float hotAirY = 18.0f, hotAirX = 22.0f;
 float sunPulse = 0.0f;
 float birdWingAngle = 0.0f;
-
-// Animated ice-cream truck
-float iceCreamTruckX = -38.0f;
-float truckWheelAngle = 0.0f;
+float limbSwing = 0.0f;
 
 struct Balloon {
-    float x, y, z, speedY, speedX, r, g, b;
+    float x, y, z;
+    float speedY, speedX;
+    float r, g, b;
 };
 std::vector<Balloon> floatingBalloons;
 
 struct Cloud {
-    float x, y, z, speed, scale;
+    float x, y, z;
+    float speed;
+    float scale;
 };
 std::vector<Cloud> clouds;
 
 struct Bird {
-    float x, y, z, speed;
+    float x, y, z;
+    float speed;
 };
 std::vector<Bird> birds;
 
-// ============================================================
-// ROLLER COASTER TRACK
-// ============================================================
+// --- 3D Vertical Loop Roller Coaster Track Function ---
 void getCoasterPoint(float t, float &x, float &y, float &z) {
     float angle = t;
     float radiusX = 24.0f;
@@ -55,7 +55,6 @@ void getCoasterPoint(float t, float &x, float &y, float &z) {
 
     float loopCenter = 1.15f;
     float dist = angle - loopCenter;
-
     if (dist > -0.6f && dist < 0.6f) {
         float localTheta = ((dist + 0.6f) / 1.2f) * 2.0f * M_PI;
         float loopR = 6.5f;
@@ -64,9 +63,7 @@ void getCoasterPoint(float t, float &x, float &y, float &z) {
     }
 }
 
-// ============================================================
-// SCENE INITIALIZATION
-// ============================================================
+// --- Scene Initialization ---
 void initScene() {
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_LIGHTING);
@@ -75,16 +72,8 @@ void initScene() {
     glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
     glEnable(GL_NORMALIZE);
 
-    GLfloat globalAmbient[] = {0.35f, 0.35f, 0.35f, 1.0f};
-    glLightModelfv(GL_LIGHT_MODEL_AMBIENT, globalAmbient);
-
-    // Floating balloons
-    float colors[5][3] = {
-        {1.0f, 0.25f, 0.3f}, {0.2f, 0.8f, 0.95f},
-        {1.0f, 0.82f, 0.15f}, {0.95f, 0.45f, 0.75f},
-        {0.6f, 0.35f, 0.95f}
-    };
-
+    // Floating Balloons
+    float colors[5][3] = {{1.0f,0.25f,0.3f}, {0.2f,0.8f,0.95f}, {1.0f,0.82f,0.15f}, {0.95f,0.45f,0.75f}, {0.6f,0.35f,0.95f}};
     for (int i = 0; i < 15; i++) {
         Balloon b;
         b.x = -28.0f + (rand() % 56);
@@ -120,19 +109,18 @@ void initScene() {
     }
 }
 
-// ============================================================
-// SKY DOME
-// ============================================================
+// --- Static Surrounding Sky Dome ---
 void drawSkyDome() {
     glPushMatrix();
     glTranslatef(camX, camY, camZ);
     glDepthMask(GL_FALSE);
     glDisable(GL_LIGHTING);
 
-    if (!isSunset)
+    if (!isSunset) {
         glColor3f(0.52f, 0.78f, 0.96f);
-    else
+    } else {
         glColor3f(0.92f, 0.48f, 0.28f);
+    }
 
     glutSolidSphere(180.0, 30, 30);
 
@@ -141,14 +129,9 @@ void drawSkyDome() {
     glPopMatrix();
 }
 
-// ============================================================
-// GROUND, CITY SKYLINE, WINDOWS AND STREET LAMPS
-// ============================================================
+// --- Ground, Urban City Skyline Backdrop & Plaza ---
 void drawGroundAndCity() {
-    glColor3f(isSunset ? 0.08f : 0.16f,
-              isSunset ? 0.18f : 0.52f,
-              isSunset ? 0.04f : 0.18f);
-
+    glColor3f(isSunset ? 0.08f : 0.16f, isSunset ? 0.18f : 0.52f, isSunset ? 0.04f : 0.18f);
     glBegin(GL_QUADS);
     glNormal3f(0, 1, 0);
     glVertex3f(-150, 0, -150);
@@ -157,11 +140,7 @@ void drawGroundAndCity() {
     glVertex3f(-150, 0, 150);
     glEnd();
 
-    // Plaza
-    glColor3f(isSunset ? 0.28f : 0.58f,
-              isSunset ? 0.24f : 0.52f,
-              isSunset ? 0.22f : 0.48f);
-
+    glColor3f(isSunset ? 0.28f : 0.58f, isSunset ? 0.24f : 0.52f, isSunset ? 0.22f : 0.48f);
     glBegin(GL_QUADS);
     glNormal3f(0, 1, 0);
     glVertex3f(-34, 0.03f, -14);
@@ -170,29 +149,24 @@ void drawGroundAndCity() {
     glVertex3f(-34, 0.03f, 26);
     glEnd();
 
-    float bldgWidths[] = {6.0f, 4.5f, 7.0f, 5.0f, 8.0f, 4.0f,
-                         6.5f, 5.5f, 7.5f, 4.2f, 6.0f};
-    float bldgHeights[] = {18.0f, 26.0f, 14.0f, 32.0f, 22.0f, 28.0f,
-                          16.0f, 35.0f, 20.0f, 24.0f, 19.0f};
+    float bldgWidths[]  = {6.0f, 4.5f, 7.0f, 5.0f, 8.0f, 4.0f, 6.5f, 5.5f, 7.5f, 4.2f, 6.0f};
+    float bldgHeights[] = {18.0f, 26.0f, 14.0f, 32.0f, 22.0f, 28.0f, 16.0f, 35.0f, 20.0f, 24.0f, 19.0f};
 
     float currentX = -65.0f;
-
     for (int i = 0; i < 11; i++) {
         float w = bldgWidths[i];
         float h = bldgHeights[i];
+        float depth = 5.0f;
 
-        if (!isSunset)
-            glColor3f(0.35f + (i % 3) * 0.08f,
-                      0.42f + (i % 2) * 0.06f,
-                      0.52f + (i % 4) * 0.05f);
-        else
-            glColor3f(0.18f + (i % 3) * 0.03f,
-                      0.12f + (i % 2) * 0.02f,
-                      0.16f + (i % 4) * 0.03f);
+        if (!isSunset) {
+            glColor3f(0.35f + (i % 3) * 0.08f, 0.42f + (i % 2) * 0.06f, 0.52f + (i % 4) * 0.05f);
+        } else {
+            glColor3f(0.18f + (i % 3) * 0.03f, 0.12f + (i % 2) * 0.02f, 0.16f + (i % 4) * 0.03f);
+        }
 
         glPushMatrix();
         glTranslatef(currentX + w / 2.0f, h / 2.0f, -60.0f);
-        glScalef(w, h, 5.0f);
+        glScalef(w, h, depth);
         glutSolidCube(1.0f);
         glPopMatrix();
 
@@ -214,16 +188,15 @@ void drawGroundAndCity() {
             }
         }
 
-        GLfloat noEmit[] = {0, 0, 0, 1};
-        glMaterialfv(GL_FRONT, GL_EMISSION, noEmit);
+        if (isSunset) {
+            GLfloat noEmit[] = {0, 0, 0, 1};
+            glMaterialfv(GL_FRONT, GL_EMISSION, noEmit);
+        }
+
         currentX += w + 1.2f;
     }
 
-    // Street lamps
-    float lampCoords[][2] = {
-        {-22, 12}, {-12, 16}, {14, 12}, {22, 4}, {-6, -12}, {16, -12}
-    };
-
+    float lampCoords[][2] = {{-22, 12}, {-12, 16}, {14, 12}, {22, 4}, {-6, -12}, {16, -12}};
     for (int i = 0; i < 6; i++) {
         glPushMatrix();
         glTranslatef(lampCoords[i][0], 0, lampCoords[i][1]);
@@ -236,12 +209,7 @@ void drawGroundAndCity() {
 
         float pulse = 0.7f + 0.3f * sin(globalTime * 4.0f + i);
         float intensity = isSunset ? 1.4f : 0.5f;
-        GLfloat emit[] = {
-            intensity * pulse,
-            0.85f * intensity * pulse,
-            0.4f * intensity * pulse,
-            1.0f
-        };
+        GLfloat emit[] = {1.0f * intensity * pulse, 0.85f * intensity * pulse, 0.4f * intensity * pulse, 1.0f};
         glMaterialfv(GL_FRONT, GL_EMISSION, emit);
         glColor3f(1.0f, 0.95f, 0.5f);
         glTranslatef(0, 4.0f, 0);
@@ -253,19 +221,14 @@ void drawGroundAndCity() {
     }
 }
 
-// ============================================================
-// SUN WITH PULSING BRIGHTNESS
-// ============================================================
+// --- Sun ---
 void drawCelestialBody() {
     glPushMatrix();
     glTranslatef(4.0f, 32.0f, -50.0f);
-
     float brightness = 0.75f + 0.25f * sin(sunPulse);
 
     if (!isSunset) {
-        GLfloat sunEmit[] = {
-            brightness, 0.90f * brightness, 0.35f * brightness, 1.0f
-        };
+        GLfloat sunEmit[] = {1.0f * brightness, 0.90f * brightness, 0.35f * brightness, 1.0f};
         glMaterialfv(GL_FRONT, GL_EMISSION, sunEmit);
         glColor3f(1.0f, 0.95f * brightness, 0.4f);
         glutSolidSphere(3.4f, 24, 24);
@@ -281,14 +244,9 @@ void drawCelestialBody() {
     glPopMatrix();
 }
 
-// ============================================================
-// CLOUDS
-// ============================================================
+// --- Clouds ---
 void drawClouds() {
-    glColor3f(0.98f,
-              isSunset ? 0.65f : 0.95f,
-              isSunset ? 0.52f : 0.92f);
-
+    glColor3f(isSunset ? 0.98f : 0.98f, isSunset ? 0.65f : 0.95f, isSunset ? 0.52f : 0.92f);
     for (const auto& c : clouds) {
         glPushMatrix();
         glTranslatef(c.x, c.y, c.z);
@@ -302,9 +260,7 @@ void drawClouds() {
     }
 }
 
-// ============================================================
-// FERRIS WHEEL
-// ============================================================
+// --- Rotating Ferris Wheel ---
 void drawFerrisWheel() {
     glPushMatrix();
     glTranslatef(-20.0f, 0.0f, -6.0f);
@@ -313,7 +269,6 @@ void drawFerrisWheel() {
     float hubY = 13.5f;
     float radius = 9.5f;
 
-    // Support legs
     glColor3f(0.12f, 0.55f, 0.62f);
     for (int zSide = -1; zSide <= 1; zSide += 2) {
         for (int xSide = -1; xSide <= 1; xSide += 2) {
@@ -326,14 +281,12 @@ void drawFerrisWheel() {
         }
     }
 
-    // Hub axle
     glPushMatrix();
     glTranslatef(0, hubY, -2.5f);
     glColor3f(0.95f, 0.82f, 0.2f);
     glutSolidCylinder(0.45, 5.0, 16, 2);
     glPopMatrix();
 
-    // Rotating wheel
     glPushMatrix();
     glTranslatef(0, hubY, 0);
     glRotatef(ferrisAngle, 0, 0, 1);
@@ -354,7 +307,6 @@ void drawFerrisWheel() {
         glPushMatrix();
         glRotatef(theta, 0, 0, 1);
         glColor3f(0.95f, 0.85f, 0.35f);
-
         for (int zRim = -1; zRim <= 1; zRim += 2) {
             glPushMatrix();
             glTranslatef(0, 0, zRim * 1.4f);
@@ -364,33 +316,30 @@ void drawFerrisWheel() {
         }
         glPopMatrix();
 
-        // Diagonal bracing
         float nextTheta = (i + 0.5f) * (360.0f / numCabins);
         glPushMatrix();
         glRotatef(nextTheta, 0, 0, 1);
         glColor3f(0.85f, 0.72f, 0.15f);
+        glPushMatrix();
+        glTranslatef(0, 0, 0);
         glRotatef(90, 0, 1, 0);
         glutSolidCylinder(0.05, radius * 0.7f, 6, 2);
         glPopMatrix();
+        glPopMatrix();
 
-        // Animated rim lights
         if (isSunset) {
             float flicker = 0.6f + 0.4f * sin(globalTime * 6.0f + i);
-            GLfloat rimEmit[] = {
-                flicker, 0.6f * flicker, 0.2f * flicker, 1.0f
-            };
+            GLfloat rimEmit[] = {1.0f * flicker, 0.6f * flicker, 0.2f * flicker, 1.0f};
             glMaterialfv(GL_FRONT, GL_EMISSION, rimEmit);
             glColor3f(1.0f, 0.7f, 0.3f);
             glPushMatrix();
             glTranslatef(radius * cos(rad), radius * sin(rad), 0);
             glutSolidSphere(0.25, 10, 10);
             glPopMatrix();
-
-            GLfloat noEmit[] = {0, 0, 0, 1};
+            GLfloat noEmit[] = {0,0,0,1};
             glMaterialfv(GL_FRONT, GL_EMISSION, noEmit);
         }
 
-        // Passenger cabin
         float cx = radius * cos(rad);
         float cy = radius * sin(rad);
 
@@ -398,9 +347,7 @@ void drawFerrisWheel() {
         glTranslatef(cx, cy, 0);
         glRotatef(-ferrisAngle, 0, 0, 1);
 
-        glColor3f((i % 2 == 0) ? 0.15f : 0.95f,
-                  (i % 2 == 0) ? 0.65f : 0.78f,
-                  (i % 2 == 0) ? 0.72f : 0.22f);
+        glColor3f((i % 2 == 0) ? 0.15f : 0.95f, (i % 2 == 0) ? 0.65f : 0.78f, (i % 2 == 0) ? 0.72f : 0.22f);
         glTranslatef(0, -1.1f, 0);
         glutSolidCube(1.6f);
 
@@ -410,14 +357,11 @@ void drawFerrisWheel() {
         glutSolidCone(1.2, 0.7, 12, 2);
         glPopMatrix();
     }
-
     glPopMatrix();
     glPopMatrix();
 }
 
-// ============================================================
-// CIRCUS TENT WITH ANIMATED DECORATIVE LIGHTS
-// ============================================================
+// --- Circus Tent with Striped Lighting ---
 void drawCircusTent() {
     glPushMatrix();
     glTranslatef(6.0f, 0.0f, 1.0f);
@@ -431,12 +375,9 @@ void drawCircusTent() {
         float a1 = i * 2.0f * M_PI / slices;
         float a2 = (i + 1) * 2.0f * M_PI / slices;
 
-        if (i % 2 == 0)
-            glColor3f(0.10f, 0.45f, 0.48f);
-        else
-            glColor3f(0.96f, 0.92f, 0.82f);
+        if (i % 2 == 0) glColor3f(0.85f, 0.12f, 0.15f); // Red
+        else glColor3f(0.98f, 0.96f, 0.92f);             // Cream
 
-        // Leave one opening
         if (i != 4) {
             glBegin(GL_QUADS);
             glNormal3f(cos(a1), 0, sin(a1));
@@ -447,32 +388,20 @@ void drawCircusTent() {
             glEnd();
         }
 
-        // Roof panels
         glBegin(GL_TRIANGLES);
-        glNormal3f(cos((a1 + a2) / 2), 0.5f, sin((a1 + a2) / 2));
+        glNormal3f(cos((a1+a2)/2), 0.5f, sin((a1+a2)/2));
         glVertex3f(0, wallH + roofH, 0);
-        glVertex3f((radius + 0.45f) * cos(a1), wallH,
-                   (radius + 0.45f) * sin(a1));
-        glVertex3f((radius + 0.45f) * cos(a2), wallH,
-                   (radius + 0.45f) * sin(a2));
+        glVertex3f((radius + 0.45f) * cos(a1), wallH, (radius + 0.45f) * sin(a1));
+        glVertex3f((radius + 0.45f) * cos(a2), wallH, (radius + 0.45f) * sin(a2));
         glEnd();
 
-        // Flickering bulbs
-        float lightMult = isSunset ? 2.0f : 1.0f;
-        float flicker = 0.65f +
-            0.35f * sin(globalTime * 8.0f + i * 1.4f);
-        float glow = lightMult * flicker;
-
-        GLfloat emit[] = {
-            glow, 0.75f * glow, 0.25f * glow, 1.0f
-        };
+        float lightMult = isSunset ? 1.6f : 0.8f;
+        float flicker = 0.6f + 0.4f * sin(globalTime * 7.0f + i * 1.4f);
+        GLfloat emit[] = {1.0f * lightMult * flicker, 0.82f * lightMult * flicker, 0.25f * lightMult * flicker, 1.0f};
         glMaterialfv(GL_FRONT, GL_EMISSION, emit);
-        glColor3f(1.0f, 0.85f, 0.3f);
-
+        glColor3f(1.0f, 0.88f, 0.35f);
         glPushMatrix();
-        glTranslatef((radius + 0.5f) * cos(a1),
-                     wallH - 0.1f,
-                     (radius + 0.5f) * sin(a1));
+        glTranslatef((radius + 0.5f) * cos(a1), wallH - 0.1f, (radius + 0.5f) * sin(a1));
         glutSolidSphere(0.22, 10, 10);
         glPopMatrix();
     }
@@ -480,7 +409,6 @@ void drawCircusTent() {
     GLfloat noEmit[] = {0, 0, 0, 1};
     glMaterialfv(GL_FRONT, GL_EMISSION, noEmit);
 
-    // Tent top decoration
     glColor3f(0.95f, 0.78f, 0.20f);
     glPushMatrix();
     glTranslatef(0, wallH + roofH, 0);
@@ -493,249 +421,236 @@ void drawCircusTent() {
     glPopMatrix();
 }
 
-// ============================================================
-// CLOWN CHARACTER
-// ============================================================
-void drawClown() {
-    glPushMatrix();
-    glTranslatef(15.0f, 0.0f, 10.0f);
+// --- Juggling Joker Character (FULLY SELF-ILLUMINATED / GLOWING SO IT CANNOT BE HIDDEN IN SHADOWS) ---
 
-    // Body
-    glColor3f(0.95f, 0.15f, 0.25f);
+void drawJugglingJoker() {
     glPushMatrix();
-    glTranslatef(0, 2.4f, 0);
-    glScalef(1.1f, 1.8f, 0.7f);
-    glutSolidCube(1.0f);
-    glPopMatrix();
 
-    // Head
-    glColor3f(1.0f, 0.85f, 0.68f);
-    glPushMatrix();
-    glTranslatef(0, 4.0f, 0);
-    glutSolidSphere(0.85f, 20, 20);
-    glPopMatrix();
+    // Original Joker position and size
+    glTranslatef(2.0f, 0.0f, 15.0f);
+    glScalef(2.0f, 2.0f, 2.0f);
 
-    // Nose
-    glColor3f(1.0f, 0.0f, 0.0f);
-    glPushMatrix();
-    glTranslatef(0, 3.95f, 0.78f);
-    glutSolidSphere(0.22f, 12, 12);
-    glPopMatrix();
+    // Slight self-illumination keeps the Joker visible
+    GLfloat jokerEmit[] = {0.12f, 0.12f, 0.12f, 1.0f};
+    glMaterialfv(GL_FRONT, GL_EMISSION, jokerEmit);
 
-    // Eyes
-    glColor3f(0.0f, 0.0f, 0.0f);
+    // ================= LEGS =================
+    float danceSwing = sin(limbSwing * 3.0f) * 12.0f;
+
     for (int side = -1; side <= 1; side += 2) {
         glPushMatrix();
-        glTranslatef(side * 0.3f, 4.25f, 0.72f);
-        glutSolidSphere(0.10f, 10, 10);
-        glPopMatrix();
-    }
+        glTranslatef(side * 0.22f, 1.1f, 0.0f);
+        glRotatef(side * danceSwing, 1.0f, 0.0f, 0.0f);
 
-    // Hat
-    glColor3f(0.1f, 0.3f, 1.0f);
-    glPushMatrix();
-    glTranslatef(0, 4.85f, 0);
-    glutSolidCone(0.65f, 1.1f, 16, 16);
-    glPopMatrix();
-
-    glColor3f(1.0f, 0.85f, 0.0f);
-    glPushMatrix();
-    glTranslatef(0, 5.95f, 0);
-    glutSolidSphere(0.18f, 10, 10);
-    glPopMatrix();
-
-    // Arms
-    glColor3f(1.0f, 0.8f, 0.65f);
-    for (int side = -1; side <= 1; side += 2) {
+        // Green trousers
+        glColor3f(0.10f, 0.75f, 0.20f);
         glPushMatrix();
-        glTranslatef(side * 0.9f, 2.9f, 0);
-        glRotatef(side * 35.0f, 0, 0, 1);
-        glScalef(0.3f, 1.2f, 0.3f);
+        glTranslatef(0.0f, -0.55f, 0.0f);
+        glScalef(0.22f, 1.1f, 0.22f);
         glutSolidCube(1.0f);
         glPopMatrix();
-    }
 
-    // Legs
-    glColor3f(0.1f, 0.25f, 0.85f);
-    for (int side = -1; side <= 1; side += 2) {
+        // Red shoes
+        glColor3f(1.0f, 0.05f, 0.05f);
         glPushMatrix();
-        glTranslatef(side * 0.35f, 0.7f, 0);
-        glScalef(0.35f, 1.3f, 0.4f);
+        glTranslatef(0.0f, -1.15f, 0.25f);
+        glScalef(0.32f, 0.22f, 0.45f);
         glutSolidCube(1.0f);
         glPopMatrix();
+
+        glPopMatrix();
     }
 
-    glPopMatrix();
-}
-
-// ============================================================
-// JOKER CHARACTER
-// ============================================================
-void drawJoker() {
+    // ================= TORSO =================
     glPushMatrix();
-    glTranslatef(-17.0f, 0.0f, 10.0f);
-
-    // Body
-    glColor3f(0.35f, 0.05f, 0.55f);
-    glPushMatrix();
-    glTranslatef(0, 2.4f, 0);
-    glScalef(1.1f, 1.8f, 0.7f);
+    glTranslatef(0.0f, 1.75f, 0.0f);
+    glColor3f(0.48f, 0.05f, 0.75f);
+    glScalef(0.75f, 1.15f, 0.45f);
     glutSolidCube(1.0f);
     glPopMatrix();
 
-    // Head
-    glColor3f(0.9f, 0.85f, 0.72f);
-    glPushMatrix();
-    glTranslatef(0, 4.0f, 0);
-    glutSolidSphere(0.85f, 20, 20);
-    glPopMatrix();
+    // ================= RAISED ARMS AND HANDS =================
+    // The arms point outward and upward toward the ball-catching positions.
+    const float handX = 1.05f;
+    const float handY = 2.65f;
+    const float handZ = 0.55f;
 
-    // Nose
-    glColor3f(0.9f, 0.05f, 0.1f);
-    glPushMatrix();
-    glTranslatef(0, 3.95f, 0.78f);
-    glutSolidSphere(0.17f, 12, 12);
-    glPopMatrix();
-
-    // Eyes
-    glColor3f(0.05f, 0.05f, 0.05f);
     for (int side = -1; side <= 1; side += 2) {
         glPushMatrix();
-        glTranslatef(side * 0.3f, 4.25f, 0.72f);
-        glutSolidSphere(0.1f, 10, 10);
-        glPopMatrix();
-    }
+        glTranslatef(side * 0.52f, 2.20f, 0.0f); // Shoulder
+        glRotatef(-side * 50.0f, 0.0f, 0.0f, 1.0f);
 
-    // Joker cap
-    glColor3f(0.15f, 0.8f, 0.25f);
-    glPushMatrix();
-    glTranslatef(0, 4.7f, 0);
-    glRotatef(180, 1, 0, 0);
-    glutSolidCone(0.65f, 1.3f, 12, 12);
-    glPopMatrix();
-
-    // Hat tips
-    glColor3f(1.0f, 0.8f, 0.0f);
-    for (int side = -1; side <= 1; side += 2) {
+        // Upper arm
+        glColor3f(1.0f, 0.85f, 0.0f);
         glPushMatrix();
-        glTranslatef(side * 0.55f, 5.15f, 0);
-        glutSolidSphere(0.17f, 10, 10);
-        glPopMatrix();
-    }
-
-    // Arms
-    glColor3f(0.9f, 0.8f, 0.7f);
-    for (int side = -1; side <= 1; side += 2) {
-        glPushMatrix();
-        glTranslatef(side * 0.9f, 2.9f, 0);
-        glRotatef(side * 35.0f, 0, 0, 1);
-        glScalef(0.3f, 1.2f, 0.3f);
+        glTranslatef(0.0f, 0.42f, 0.0f);
+        glScalef(0.18f, 0.85f, 0.18f);
         glutSolidCube(1.0f);
         glPopMatrix();
-    }
-
-    // Legs
-    glColor3f(0.9f, 0.1f, 0.35f);
-    for (int side = -1; side <= 1; side += 2) {
-        glPushMatrix();
-        glTranslatef(side * 0.35f, 0.7f, 0);
-        glScalef(0.35f, 1.3f, 0.4f);
-        glutSolidCube(1.0f);
         glPopMatrix();
-    }
 
-    glPopMatrix();
-}
+        // Palm positioned beside the end of the raised arm
+        glPushMatrix();
+        glTranslatef(side * handX, handY, handZ);
+        glColor3f(1.0f, 0.72f, 0.52f);
+        glutSolidSphere(0.18f, 16, 16);
+        glPopMatrix();
 
-// ============================================================
-// ANIMATED ICE-CREAM TRUCK
-// ============================================================
-void drawIceCreamTruck() {
-    glPushMatrix();
-    glTranslatef(iceCreamTruckX, 0.0f, 20.0f);
-
-    // Main truck body
-    glColor3f(0.95f, 0.25f, 0.4f);
-    glPushMatrix();
-    glTranslatef(0, 1.5f, 0);
-    glScalef(7.0f, 2.0f, 2.8f);
-    glutSolidCube(1.0f);
-    glPopMatrix();
-
-    // Driver cabin
-    glColor3f(0.15f, 0.65f, 0.85f);
-    glPushMatrix();
-    glTranslatef(2.2f, 2.5f, 0);
-    glScalef(2.0f, 1.5f, 2.7f);
-    glutSolidCube(1.0f);
-    glPopMatrix();
-
-    // Front windshield
-    glColor3f(0.65f, 0.9f, 1.0f);
-    glPushMatrix();
-    glTranslatef(2.2f, 2.6f, 1.37f);
-    glScalef(1.4f, 0.9f, 0.05f);
-    glutSolidCube(1.0f);
-    glPopMatrix();
-
-    // Ice-cream decoration on roof
-    glColor3f(1.0f, 0.85f, 0.2f);
-    glPushMatrix();
-    glTranslatef(-1.0f, 2.9f, 0);
-    glutSolidSphere(0.65f, 16, 16);
-    glTranslatef(0, 0.65f, 0);
-    glColor3f(1.0f, 0.35f, 0.55f);
-    glutSolidCone(0.5f, 0.9f, 12, 12);
-    glPopMatrix();
-
-    // Four wheels
-    for (int side = -1; side <= 1; side += 2) {
-        for (int wheel = -1; wheel <= 1; wheel += 2) {
+        // Small fingers make the hands easier to see
+        for (int finger = -1; finger <= 1; ++finger) {
             glPushMatrix();
-            glTranslatef(wheel * 2.2f, 0.65f, side * 1.4f);
-            glRotatef(truckWheelAngle, 0, 0, 1);
-            glColor3f(0.08f, 0.08f, 0.08f);
-            glutSolidTorus(0.18f, 0.48f, 12, 20);
+            glTranslatef(side * handX + finger * 0.075f,
+                         handY + 0.12f,
+                         handZ + 0.015f);
+            glColor3f(1.0f, 0.72f, 0.52f);
+            glutSolidSphere(0.055f, 10, 10);
             glPopMatrix();
         }
     }
 
-    // Side serving window
-    glColor3f(1.0f, 0.9f, 0.65f);
+    // ================= HEAD =================
     glPushMatrix();
-    glTranslatef(-0.7f, 2.0f, 1.42f);
-    glScalef(1.5f, 0.8f, 0.08f);
+    glTranslatef(0.0f, 2.65f, 0.0f);
+
+    // Face
+    glColor3f(1.0f, 0.72f, 0.52f);
+    glutSolidSphere(0.35f, 20, 20);
+
+    // Red smile
+    glColor3f(0.9f, 0.0f, 0.05f);
+    glPushMatrix();
+    glTranslatef(0.0f, -0.05f, 0.32f);
+    glScalef(0.18f, 0.08f, 0.05f);
     glutSolidCube(1.0f);
     glPopMatrix();
 
-    // Front headlights
-    glColor3f(1.0f, 1.0f, 0.2f);
+    // Green hat
+    glTranslatef(0.0f, 0.3f, 0.0f);
+    glColor3f(0.0f, 0.85f, 0.25f);
+    glutSolidCone(0.38f, 0.4f, 12, 3);
+
+    // Yellow hat pom-pom
+    glTranslatef(0.0f, 0.4f, 0.0f);
+    glColor3f(1.0f, 0.85f, 0.0f);
+    glutSolidSphere(0.12f, 12, 12);
+    glPopMatrix();
+
+    // ================= THREE-BALL CASCADE JUGGLING =================
+    // Each ball is one throw-phase apart. The path is continuous at both hands.
+    float ballColors[3][3] = {
+        {1.0f, 0.0f, 0.05f},  // Red
+        {0.0f, 1.0f, 0.15f},  // Green
+        {0.1f, 0.25f, 1.0f}   // Blue
+    };
+
+    const float arcHeight = 1.65f;
+    const float throwRate = 1.5f; // Throws per second
+
+    for (int b = 0; b < 3; ++b) {
+        // Offset the three balls by one-third of a throw cycle
+        float motion = globalTime * throwRate + b / 3.0f;
+        int throwNumber = (int)floor(motion);
+        float t = motion - floor(motion); // 0.0 to 1.0
+
+        float startX, endX;
+        if (throwNumber % 2 == 0) {
+            startX = -handX;
+            endX = handX;
+        } else {
+            startX = handX;
+            endX = -handX;
+        }
+
+        // Move from one hand to the other
+        float bx = startX + (endX - startX) * t;
+
+        // Parabolic arc: low at the hands, high in the middle
+        float by = handY + arcHeight * 4.0f * t * (1.0f - t);
+        float bz = handZ;
+
+        glPushMatrix();
+        glTranslatef(bx, by, bz);
+        glColor3f(ballColors[b][0], ballColors[b][1], ballColors[b][2]);
+        glutSolidSphere(0.18f, 20, 20);
+        glPopMatrix();
+    }
+
+    // Reset material emission so it does not affect later objects
+    GLfloat noEmit[] = {0.0f, 0.0f, 0.0f, 1.0f};
+    glMaterialfv(GL_FRONT, GL_EMISSION, noEmit);
+
+    glPopMatrix();
+}
+
+
+// --- Ice Cream Stand ---
+void drawIceCreamStand() {
     glPushMatrix();
-    glTranslatef(3.55f, 1.5f, 0.8f);
-    glutSolidSphere(0.2f, 10, 10);
+    glTranslatef(-8.5f, 0.0f, 9.0f);
+    glRotatef(25.0f, 0, 1, 0);
+
+    glColor3f(0.96f, 0.90f, 0.80f);
+    glPushMatrix();
+    glTranslatef(0, 1.6f, 0);
+    glScalef(3.4f, 3.2f, 2.4f);
+    glutSolidCube(1.0f);
+    glPopMatrix();
+
+    glColor3f(0.92f, 0.52f, 0.62f);
+    glPushMatrix();
+    glTranslatef(0, 1.4f, 1.25f);
+    glScalef(3.5f, 0.25f, 0.3f);
+    glutSolidCube(1.0f);
+    glPopMatrix();
+
+    for (int side = -1; side <= 1; side += 2) {
+        glPushMatrix();
+        glTranslatef(side * 1.6f, 0, 1.1f);
+        glColor3f(0.92f, 0.85f, 0.76f);
+        glRotatef(-90, 1, 0, 0);
+        glutSolidCylinder(0.35, 3.6, 12, 2);
+        glTranslatef(0, 0, 3.6f);
+        glColor3f(0.55f, 0.35f, 0.72f);
+        glutSolidCone(0.55, 1.3, 12, 2);
+        glPopMatrix();
+    }
+
+    glPushMatrix();
+    glTranslatef(-0.5f, 3.6f, 0.2f);
+    glColor3f(1.0f, 0.96f, 0.92f);
+    glutSolidSphere(0.75, 14, 14);
+    glTranslatef(0, 0.65f, 0);
+    glutSolidSphere(0.50, 14, 14);
+    glPopMatrix();
+
+    glPushMatrix();
+    glTranslatef(0.7f, 4.1f, 0.3f);
+    glRotatef(-15.0f, 0, 0, 1);
+    glColor3f(0.85f, 0.58f, 0.28f);
+    glRotatef(90, 1, 0, 0);
+    glutSolidCone(0.45, 1.1, 12, 2);
+    glRotatef(-90, 1, 0, 0);
+    glColor3f(0.98f, 0.55f, 0.68f);
+    glutSolidSphere(0.48, 12, 12);
     glPopMatrix();
 
     glPopMatrix();
 }
 
-// ============================================================
-// ROLLER COASTER
-// ============================================================
+// --- Roller Coaster ---
 void drawRollerCoaster() {
     int segments = 120;
     float step = (2.0f * M_PI) / segments;
-
-    glLineWidth(4.5f);
-    glColor3f(0.15f, 0.72f, 0.78f);
 
     for (int i = 0; i < segments; i++) {
         float t1 = i * step;
         float t2 = (i + 1) * step;
         float x1, y1, z1, x2, y2, z2;
-
         getCoasterPoint(t1, x1, y1, z1);
         getCoasterPoint(t2, x2, y2, z2);
 
+        glColor3f(0.15f, 0.72f, 0.78f);
+        glLineWidth(4.5f);
         glBegin(GL_LINES);
         glVertex3f(x1 - 0.35f, y1, z1);
         glVertex3f(x2 - 0.35f, y2, z2);
@@ -750,42 +665,32 @@ void drawRollerCoaster() {
             glRotatef(-90, 1, 0, 0);
             glutSolidCylinder(0.16, y1, 8, 2);
             glPopMatrix();
-            glColor3f(0.15f, 0.72f, 0.78f);
         }
     }
 
-    // Five coaster cars
     for (int c = 0; c < 5; c++) {
         float carT = coasterProgress - c * 0.14f;
         float cx, cy, cz, nx, ny, nz;
-
         getCoasterPoint(carT, cx, cy, cz);
         getCoasterPoint(carT + 0.04f, nx, ny, nz);
 
-        float dx = nx - cx;
-        float dy = ny - cy;
-        float dz = nz - cz;
-        float length = sqrt(dx * dx + dy * dy + dz * dz);
-
+        float dx = nx - cx, dy = ny - cy, dz = nz - cz;
         float yaw = atan2(dx, dz) * 180.0f / M_PI;
-        float pitch = -asin(dy / length) * 180.0f / M_PI;
+        float pitch = -asin(dy / sqrt(dx*dx + dy*dy + dz*dz)) * 180.0f / M_PI;
 
         glPushMatrix();
         glTranslatef(cx, cy + 0.3f, cz);
         glRotatef(yaw, 0, 1, 0);
         glRotatef(pitch, 1, 0, 0);
 
-        glColor3f(c == 0 ? 0.95f : 0.85f,
-                  c % 2 == 0 ? 0.25f : 0.75f, 0.2f);
+        glColor3f(c == 0 ? 0.95f : 0.85f, c % 2 == 0 ? 0.25f : 0.75f, 0.2f);
         glScalef(1.0f, 0.65f, 1.45f);
         glutSolidCube(1.0f);
         glPopMatrix();
     }
 }
 
-// ============================================================
-// HOT AIR BALLOON
-// ============================================================
+// --- Hot Air Balloon ---
 void drawHotAirBalloon() {
     glPushMatrix();
     glTranslatef(hotAirX, hotAirY, -14.0f);
@@ -814,9 +719,7 @@ void drawHotAirBalloon() {
     glPopMatrix();
 }
 
-// ============================================================
-// FLOATING BALLOONS
-// ============================================================
+// --- Floating Balloons ---
 void drawFloatingBalloons() {
     for (const auto& b : floatingBalloons) {
         glPushMatrix();
@@ -835,15 +738,11 @@ void drawFloatingBalloons() {
     }
 }
 
-// ============================================================
-// TREES AND FLOWERS
-// ============================================================
+// --- Vegetation ---
 void drawVegetation() {
     float treePos[][2] = {
-        {-30, -18}, {-28, 6}, {-25, 18}, {28, -16},
-        {30, 8}, {-8, -22}, {12, -22}, {22, -22}
+        {-30, -18}, {-28, 6}, {-25, 18}, {28, -16}, {30, 8}, {-8, -22}, {12, -22}, {22, -22}
     };
-
     for (auto& p : treePos) {
         glPushMatrix();
         glTranslatef(p[0], 0, p[1]);
@@ -854,9 +753,7 @@ void drawVegetation() {
         glutSolidCylinder(0.38, 3.2, 10, 2);
         glPopMatrix();
 
-        glColor3f(isSunset ? 0.08f : 0.18f,
-                  isSunset ? 0.25f : 0.60f,
-                  isSunset ? 0.05f : 0.22f);
+        glColor3f(isSunset ? 0.08f : 0.18f, isSunset ? 0.25f : 0.60f, isSunset ? 0.05f : 0.22f);
         glTranslatef(0, 3.8f, 0);
         glutSolidSphere(2.1, 14, 14);
         glTranslatef(0, 1.3f, 0);
@@ -864,10 +761,8 @@ void drawVegetation() {
         glPopMatrix();
     }
 
-    // Flowers
     for (float fx = -16.0f; fx <= 16.0f; fx += 2.2f) {
         if (fabs(fx) < 4.5f) continue;
-
         glPushMatrix();
         glTranslatef(fx, 0.2f, 16.5f);
         glColor3f(0.95f, 0.25f, 0.45f);
@@ -879,21 +774,16 @@ void drawVegetation() {
     }
 }
 
-// ============================================================
-// MOVING BIRDS WITH FLAPPING WINGS
-// ============================================================
+// --- Birds ---
 void drawBirds() {
     glColor3f(0.2f, 0.2f, 0.25f);
-
     for (const auto& bd : birds) {
-        // Bird body
         glPushMatrix();
         glTranslatef(bd.x, bd.y, bd.z);
         glScalef(0.6f, 0.2f, 0.25f);
         glutSolidSphere(0.5, 8, 8);
         glPopMatrix();
 
-        // Flapping wings
         for (int side = -1; side <= 1; side += 2) {
             glPushMatrix();
             glTranslatef(bd.x, bd.y, bd.z);
@@ -906,37 +796,20 @@ void drawBirds() {
     }
 }
 
-// ============================================================
-// MAIN DISPLAY FUNCTION
-// ============================================================
+// --- Main Display ---
 void display() {
     glClearColor(0.02f, 0.02f, 0.05f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glLoadIdentity();
 
-    gluLookAt(camX, camY, camZ,
-              0.0f, 6.0f, -12.0f,
-              0.0f, 1.0f, 0.0f);
+    gluLookAt(camX, camY, camZ, 0.0f, 6.0f, -12.0f, 0.0f, 1.0f, 0.0f);
 
     drawSkyDome();
 
-    // Sunlight
     GLfloat lightPos[] = {4.0f, 32.0f, -50.0f, 1.0f};
     float sunIntensity = isSunset ? 1.1f : 0.90f;
-
-    GLfloat diffuse[] = {
-        sunIntensity,
-        sunIntensity * 0.80f,
-        isSunset ? 0.5f : sunIntensity * 0.88f,
-        1.0f
-    };
-
-    GLfloat ambient[] = {
-        isSunset ? 0.35f : 0.38f,
-        isSunset ? 0.25f : 0.36f,
-        isSunset ? 0.22f : 0.36f,
-        1.0f
-    };
+    GLfloat diffuse[] = {sunIntensity, sunIntensity * 0.80f, isSunset ? 0.5f : sunIntensity * 0.88f, 1.0f};
+    GLfloat ambient[] = {isSunset ? 0.35f : 0.38f, isSunset ? 0.25f : 0.36f, isSunset ? 0.22f : 0.36f, 1.0f};
 
     glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
     glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuse);
@@ -945,16 +818,11 @@ void display() {
     drawGroundAndCity();
     drawCelestialBody();
     drawClouds();
-
     drawFerrisWheel();
     drawCircusTent();
-
-    drawClown();
-    drawJoker();
-
-    drawIceCreamTruck();
+    drawJugglingJoker(); // Now brightly self-illuminated and fully visible!
+    drawIceCreamStand();
     drawRollerCoaster();
-
     drawHotAirBalloon();
     drawFloatingBalloons();
     drawVegetation();
@@ -963,58 +831,38 @@ void display() {
     glutSwapBuffers();
 }
 
-// ============================================================
-// ANIMATION TIMER
-// ============================================================
+// --- Animation Timer ---
 void update(int value) {
     if (!isPaused) {
         globalTime += 0.016f;
-
-        // Ferris wheel
         ferrisAngle += 0.55f;
         if (ferrisAngle >= 360.0f) ferrisAngle -= 360.0f;
 
-        // Roller coaster
         coasterProgress += 0.022f;
-        if (coasterProgress >= 2.0f * M_PI)
-            coasterProgress -= 2.0f * M_PI;
+        if (coasterProgress >= 2.0f * M_PI) coasterProgress -= 2.0f * M_PI;
 
-        // Sun brightness pulse and bird wings
         sunPulse += 0.02f;
         birdWingAngle = 35.0f * sin(globalTime * 10.0f);
+        limbSwing += 0.06f;
 
-        // Hot-air balloon
         hotAirY += 0.018f;
         hotAirX += 0.012f * sin(globalTime * 0.5f);
         if (hotAirY > 36.0f) hotAirY = 10.0f;
 
-        // Ice-cream truck movement and wheel rotation
-        iceCreamTruckX += 0.045f;
-        if (iceCreamTruckX > 38.0f)
-            iceCreamTruckX = -38.0f;
-
-        truckWheelAngle -= 5.0f;
-        if (truckWheelAngle < 0.0f)
-            truckWheelAngle += 360.0f;
-
-        // Floating balloons
         for (auto& b : floatingBalloons) {
             b.y += b.speedY;
             b.x += b.speedX;
-
             if (b.y > 32.0f) {
                 b.y = 2.0f;
                 b.x = -28.0f + (rand() % 56);
             }
         }
 
-        // Clouds
         for (auto& c : clouds) {
             c.x += c.speed;
             if (c.x > 52.0f) c.x = -52.0f;
         }
 
-        // Birds move from left to right
         for (auto& bd : birds) {
             bd.x += bd.speed;
             if (bd.x > 46.0f) bd.x = -46.0f;
@@ -1025,54 +873,30 @@ void update(int value) {
     glutTimerFunc(16, update, 0);
 }
 
-// ============================================================
-// WINDOW RESHAPE
-// ============================================================
 void reshape(int w, int h) {
     if (h == 0) h = 1;
-
     glViewport(0, 0, w, h);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-
     gluPerspective(48.0, (double)w / (double)h, 1.0, 250.0);
     glMatrixMode(GL_MODELVIEW);
 }
 
-// ============================================================
-// KEYBOARD CONTROLS
-// ============================================================
 void keyboard(unsigned char key, int x, int y) {
     switch (key) {
-        case 'n':
-        case 'N':
-            isSunset = !isSunset;
-            break;
-
-        case ' ':
-            isPaused = !isPaused;
-            break;
-
-        case 27:
-            exit(0);
-            break;
+        case 'n': case 'N': isSunset = !isSunset; break;
+        case ' ': isPaused = !isPaused; break;
+        case 27: exit(0); break;
     }
-
-    glutPostRedisplay();
 }
 
-void specialKeys(int key, int x, int y) {
-    // Camera is fixed in this project.
-}
+void specialKeys(int key, int x, int y) {}
 
-// ============================================================
-// MAIN
-// ============================================================
 int main(int argc, char** argv) {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
     glutInitWindowSize(1280, 800);
-    glutCreateWindow("3D Amusement Park - Animated Carnival Scene");
+    glutCreateWindow("3D Amusement Park - Juggling Joker & Circus Tent");
 
     initScene();
 
@@ -1081,7 +905,6 @@ int main(int argc, char** argv) {
     glutKeyboardFunc(keyboard);
     glutSpecialFunc(specialKeys);
     glutTimerFunc(16, update, 0);
-
     glutMainLoop();
     return 0;
 }
