@@ -218,6 +218,8 @@ static void buildTrack() {
     }
 }
 
+void initRunners();
+
 // ------------------------- initialisation ----------------------------
 void initScene() {
     srand(7);
@@ -242,7 +244,7 @@ void initScene() {
     // clouds (far, high in the sky)
     for (int i = 0; i < 8; i++) {
         Cloud c;
-        c.x = -75.0f + i * 20.0f; c.y = 30.0f + (i % 3) * 4.0f; c.z = -40.0f - (i % 3) * 9.0f;
+        c.x = -75.0f + i * 20.0f; c.y = 38.0f + (i % 3) * 4.0f; c.z = -46.0f - (i % 3) * 8.0f;
         c.speed = 0.02f + (i % 3) * 0.008f; c.scale = 2.0f + (i % 2) * 0.8f;
         clouds.push_back(c);
     }
@@ -266,6 +268,7 @@ void initScene() {
     for (int i = 0; i < 6; i++) { Tree t; t.x = sideT[i][0]; t.z = sideT[i][1]; t.s = 1.0f; t.pal = i % 5; trees.push_back(t); }
 
     buildTrack();
+    initRunners();
 }
 
 // ------------------------- sky, sun ----------------------------------
@@ -443,8 +446,6 @@ void drawLamp(float x, float z) {
 }
 void drawLamps() {
     for (float x = -108.0f; x <= 108.0f; x += 9.0f) drawLamp(x, -34.0f);
-    float fl[4][2] = {{-30, 20}, {-12, 21}, {12, 21}, {30, 20}};            // a few lamps in the plaza
-    for (int i = 0; i < 4; i++) drawLamp(fl[i][0], fl[i][1]);
 }
 
 void drawFlowers() {
@@ -764,7 +765,7 @@ void drawRollerCoaster() {
 // ------------------------- Clown (juggling) ----------------------------
 void drawClown() {
     glPushMatrix();
-    glTranslatef(4.0f, 0, 15.5f);
+    glTranslatef(13.0f, 0, 16.5f);
     glScalef(1.8f, 1.8f, 1.8f);
     float dance = sinf(limbSwing * 3.0f) * 10.0f;
     for (int side = -1; side <= 1; side += 2) {                       // legs + big shoes
@@ -819,7 +820,7 @@ void drawClown() {
 // ------------------------- Joker with WELCOME sign ---------------------
 void drawJoker() {
     glPushMatrix();
-    glTranslatef(-12.0f, 0, 15.0f);
+    glTranslatef(-21.0f, 0, 15.0f);
     glScalef(1.9f, 1.9f, 1.9f);
     glRotatef(sinf(globalTime * 2.0f) * 2.5f, 0, 0, 1);
     float march = sinf(limbSwing * 2.0f) * 8.0f;
@@ -882,29 +883,60 @@ void drawJoker() {
 }
 
 // ------------------------- kids ----------------------------------------
-struct KidDef { float x, z, yaw; float shirt[3], pants[3], hair[3]; int pose; int girl; };
-static const KidDef kids[10] = {
-    {-21, 11,  25, {0.2f, 0.4f, 0.95f}, {0.2f, 0.2f, 0.5f}, {0.3f, 0.2f, 0.1f}, 1, 0},
-    {-17.5f, 13.5f, -30, {1.0f, 0.85f, 0.2f}, {0.9f, 0.3f, 0.5f}, {0.1f, 0.1f, 0.1f}, 3, 1},
-    { -7, 10.5f, 15, {0.9f, 0.2f, 0.2f}, {0.2f, 0.3f, 0.6f}, {0.8f, 0.55f, 0.2f}, 2, 0},
-    { -1, 13, -15, {0.2f, 0.75f, 0.3f}, {0.3f, 0.3f, 0.35f}, {0.2f, 0.1f, 0.05f}, 0, 0},
-    {15.5f, 15.8f, 190, {0.95f, 0.5f, 0.1f}, {0.2f, 0.25f, 0.5f}, {0.4f, 0.25f, 0.1f}, 1, 0},
-    {18.5f, 16.0f, 170, {0.95f, 0.4f, 0.7f}, {0.9f, 0.6f, 0.8f}, {0.6f, 0.35f, 0.1f}, 0, 1},
-    {21.5f, 15.6f, 185, {0.4f, 0.8f, 0.95f}, {0.5f, 0.2f, 0.2f}, {0.1f, 0.1f, 0.1f}, 3, 0},
-    {19.2f, 7.0f,  10, {0.7f, 0.3f, 0.9f}, {0.2f, 0.2f, 0.3f}, {0.9f, 0.7f, 0.2f}, 2, 1},
-    {22.8f, 7.8f, -20, {0.95f, 0.85f, 0.2f}, {0.2f, 0.4f, 0.7f}, {0.15f, 0.1f, 0.05f}, 1, 0},
-    {-11, 5, 60, {0.95f, 0.3f, 0.3f}, {0.25f, 0.25f, 0.6f}, {0.3f, 0.2f, 0.1f}, 1, 1}};
+const int NRUN = 12;
+struct Runner { float z, xmin, xmax, speed; float shirt[3], pants[3], hair[3]; int pose, girl; float x, dir, yaw, phase; };
+static Runner runners[NRUN] = {
+    {20.0f, -22, 22, 0.080f, {0.2f, 0.4f, 0.95f}, {0.2f, 0.2f, 0.5f}, {0.3f, 0.2f, 0.1f}, 0, 0},
+    {19.0f, -22, 22, 0.065f, {1.0f, 0.85f, 0.2f}, {0.9f, 0.3f, 0.5f}, {0.1f, 0.1f, 0.1f}, 3, 1},
+    {12.0f, -17, 2,  0.070f, {0.9f, 0.2f, 0.2f}, {0.2f, 0.3f, 0.6f}, {0.8f, 0.55f, 0.2f}, 1, 0},
+    {12.8f, -17, 2,  0.055f, {0.2f, 0.75f, 0.3f}, {0.3f, 0.3f, 0.35f}, {0.2f, 0.1f, 0.05f}, 0, 0},
+    {-6.0f, -10, 11, 0.060f, {0.95f, 0.5f, 0.1f}, {0.2f, 0.25f, 0.5f}, {0.4f, 0.25f, 0.1f}, 1, 0},
+    {-5.0f, -10, 11, 0.075f, {0.95f, 0.4f, 0.7f}, {0.9f, 0.6f, 0.8f}, {0.6f, 0.35f, 0.1f}, 0, 1},
+    {8.0f, -24, -10, 0.060f, {0.4f, 0.8f, 0.95f}, {0.5f, 0.2f, 0.2f}, {0.1f, 0.1f, 0.1f}, 3, 0},
+    {9.0f, -24, -10, 0.070f, {0.7f, 0.3f, 0.9f}, {0.2f, 0.2f, 0.3f}, {0.9f, 0.7f, 0.2f}, 1, 1},
+    {17.5f, -12, 8,  0.090f, {0.95f, 0.85f, 0.2f}, {0.2f, 0.4f, 0.7f}, {0.15f, 0.1f, 0.05f}, 1, 0},
+    {16.0f, -12, 8,  0.065f, {0.95f, 0.3f, 0.3f}, {0.25f, 0.25f, 0.6f}, {0.3f, 0.2f, 0.1f}, 0, 1},
+    {2.5f, 4, 11.5f, 0.050f, {0.3f, 0.85f, 0.5f}, {0.3f, 0.3f, 0.6f}, {0.2f, 0.1f, 0.1f}, 3, 0},
+    {3.2f, 4, 11.5f, 0.060f, {0.95f, 0.6f, 0.2f}, {0.7f, 0.2f, 0.5f}, {0.5f, 0.3f, 0.1f}, 1, 1}};
 
-void drawKid(const KidDef& k) {
+void initRunners() {
+    for (int i = 0; i < NRUN; i++) {
+        Runner& r = runners[i];
+        r.x = r.xmin + (r.xmax - r.xmin) * fmodf(i * 0.37f, 1.0f);
+        r.dir = (i % 2) ? -1.0f : 1.0f;
+        r.yaw = r.dir * 90.0f; r.phase = (float)i;
+    }
+}
+void updateRunners() {
+    for (int i = 0; i < NRUN; i++) {
+        Runner& r = runners[i];
+        r.x += r.dir * r.speed;
+        if (r.x > r.xmax) { r.x = r.xmax; r.dir = -1.0f; }
+        if (r.x < r.xmin) { r.x = r.xmin; r.dir = 1.0f; }
+        float d = r.dir * 90.0f - r.yaw;                       // turn around smoothly
+        if (d > 10.0f) d = 10.0f;
+        if (d < -10.0f) d = -10.0f;
+        r.yaw += d;
+        r.phase += r.speed * 2.5f;
+    }
+}
+
+void drawKid(const Runner& k) {
+    const float ph = k.phase;
     glPushMatrix();
     glTranslatef(k.x, 0, k.z);
     glRotatef(k.yaw, 0, 1, 0);
     glScalef(1.5f, 1.5f, 1.5f);
-    col3(k.pants);
-    limb(-0.12f, 0.85f, 0, -0.12f, 0.08f, 0, 0.09f); limb(0.12f, 0.85f, 0, 0.12f, 0.08f, 0, 0.09f);
-    glColor3f(0.15f, 0.15f, 0.15f);
-    glPushMatrix(); glTranslatef(-0.12f, 0.04f, 0.06f); box(0.16f, 0.08f, 0.28f); glPopMatrix();
-    glPushMatrix(); glTranslatef(0.12f, 0.04f, 0.06f); box(0.16f, 0.08f, 0.28f); glPopMatrix();
+    glTranslatef(0, fabsf(sinf(ph)) * 0.08f, 0);
+    glRotatef(6.0f, 1, 0, 0);
+    for (int s = -1; s <= 1; s += 2) {                                   // running legs
+        float p = ph + (s > 0 ? PI_F : 0.0f);
+        float fy = 0.08f + 0.22f * fmaxf(0.0f, cosf(p)), fz = 0.4f * sinf(p);
+        col3(k.pants);
+        limb(s * 0.12f, 0.85f, 0, s * 0.12f, fy, fz, 0.09f);
+        glColor3f(0.15f, 0.15f, 0.15f);
+        glPushMatrix(); glTranslatef(s * 0.12f, fy - 0.04f, fz + 0.06f); box(0.16f, 0.08f, 0.28f); glPopMatrix();
+    }
     col3(k.shirt);
     glPushMatrix(); glTranslatef(0, 1.2f, 0); box(0.5f, 0.65f, 0.3f); glPopMatrix();
     if (k.girl) { col3(k.pants); glPushMatrix(); glTranslatef(0, 0.78f, 0); glRotatef(-90, 1, 0, 0); glutSolidCone(0.38, 0.45, 10, 1); glPopMatrix(); }
@@ -913,14 +945,11 @@ void drawKid(const KidDef& k) {
     col3(k.hair); glPushMatrix(); glTranslatef(0, 0.07f, -0.05f); glScalef(1.0f, 0.85f, 1.0f); glutSolidSphere(0.28, 12, 12); glPopMatrix();
     glColor3f(0.05f, 0.05f, 0.05f); ballAt(-0.09f, 0.0f, 0.23f, 0.035f, 6); ballAt(0.09f, 0.0f, 0.23f, 0.035f, 6);
     glPopMatrix();
-    // arms by pose
-    float lx, ly, lz, rx, ry, rz;
-    switch (k.pose) {
-        case 1:  lx = -0.34f; ly = 0.9f; lz = 0.05f;  rx = 0.5f;  ry = 2.0f; rz = 0.05f; break;   // waving
-        case 2:  lx = -0.8f;  ly = 1.4f; lz = 0;      rx = 0.8f;  ry = 1.4f; rz = 0;     break;   // arms out
-        case 3:  lx = -0.45f; ly = 2.0f; lz = 0.05f;  rx = 0.45f; ry = 2.0f; rz = 0.05f; break;   // cheering
-        default: lx = -0.34f; ly = 0.9f; lz = 0.05f;  rx = 0.34f; ry = 0.9f; rz = 0.05f; break;
-    }
+    // arms: swinging, one waving (pose 1) or both cheering (pose 3)
+    float lx = -0.3f, ly = 1.05f, lz = 0.35f * sinf(ph + PI_F);
+    float rx = 0.3f,  ry = 1.05f, rz = 0.35f * sinf(ph);
+    if (k.pose == 1) { rx = 0.5f; ry = 2.0f + 0.1f * sinf(ph * 2); rz = 0.05f; }
+    if (k.pose == 3) { lx = -0.45f; ly = 2.0f + 0.1f * sinf(ph * 2); lz = 0.05f; rx = 0.45f; ry = 2.0f + 0.1f * sinf(ph * 2 + 1); rz = 0.05f; }
     col3(k.shirt);
     limb(-0.3f, 1.45f, 0, lx, ly, lz, 0.07f); limb(0.3f, 1.45f, 0, rx, ry, rz, 0.07f);
     glColor3f(1.0f, 0.78f, 0.62f);
@@ -1004,7 +1033,7 @@ void drawRunningGirl() {
 void drawIceCreamTruck() {
     bool signOn = fmodf(globalTime, 1.4f) < 0.8f;
     glPushMatrix();
-    glTranslatef(18.5f, 0, 12.5f);
+    glTranslatef(22.5f, 0, 9.5f);
     glRotatef(-12.0f, 0, 1, 0);
     glScalef(1.25f, 1.25f, 1.25f);
     const float cream[3] = {0.98f, 0.93f, 0.95f};
@@ -1113,7 +1142,7 @@ void display() {
     drawIceCreamTruck();
     drawClown();
     drawJoker();
-    for (int i = 0; i < 10; i++) drawKid(kids[i]);
+    for (int i = 0; i < NRUN; i++) drawKid(runners[i]);
     drawRunningGirl();
     drawFloatingBalloons();
     drawHUD();
@@ -1134,6 +1163,7 @@ void update(int) {
         coasterS += 0.30f; if (coasterS >= trackLen) coasterS -= trackLen;
         sunPulse += 0.03f;
         limbSwing += 0.06f;
+        updateRunners();
 
         hotAirY += 0.02f;
         hotAirX += 0.01f * sinf(globalTime * 0.5f);
