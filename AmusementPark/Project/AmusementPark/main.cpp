@@ -1,13 +1,3 @@
-// =====================================================================
-//  3D AMUSEMENT PARK  -  C++ / OpenGL / freeglut   (Code::Blocks)
-//
-//  Keys:   N = toggle Day <-> Sunset      D = Day     S = Sunset
-//          SPACE = pause                  ESC = quit
-//
-//  Code::Blocks linker settings (Project > Build options > Linker settings):
-//      -lfreeglut  -lopengl32  -lglu32  -lwinmm  -lgdi32
-//  (in this order; make sure freeglut is installed for your MinGW)
-// =====================================================================
 #include <GL/freeglut.h>
 #include <GL/glu.h>
 #include <cmath>
