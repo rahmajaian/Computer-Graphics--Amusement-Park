@@ -1,3 +1,16 @@
+// =====================================================================
+//  3D AMUSEMENT PARK  -  C++ / OpenGL / freeglut   (Code::Blocks)
+//
+//  Modes:  D = Day    S = Sunset    N = Night    M = next mode
+//  Zoom:   mouse wheel  or  + / -        Rotate: drag mouse or arrow keys
+//  Views:  1 Park   2 Merry-go-round   3 Ferris wheel   4 Roller coaster
+//          5 Circus tent   6 Ice-cream truck
+//  Other:  SPACE = pause     L = show/hide the far lamp row     ESC = quit
+//
+//  Code::Blocks linker settings (Project > Build options > Linker settings):
+//      -lfreeglut  -lopengl32  -lglu32  -lwinmm  -lgdi32
+//  (in this order; make sure freeglut is installed for your MinGW)
+// =====================================================================
 #include <GL/freeglut.h>
 #include <GL/glu.h>
 #include <cmath>
@@ -13,16 +26,25 @@ static const float PI_F = 3.14159265f;
 static const float DEG  = 180.0f / 3.14159265f;
 
 // ------------------------- global state ------------------------------
-bool  targetSunset = false;   // what the user asked for
-bool  isPaused     = false;
-float duskRaw = 0.0f;         // linear 0..1 transition progress
-float dusk    = 0.0f;         // eased 0 (day) .. 1 (sunset)
+int   mode = 0;               // 0 = day, 1 = sunset, 2 = night
+bool  isPaused = false;
+bool  showLamps = true;
+float duskRaw = 0.0f, dusk = 0.0f;     // 0 = day .. 1 = sunset/night (lights on)
+float nightRaw = 0.0f, night = 0.0f;   // 0 .. 1 = full night
 float globalTime = 0.0f;
 int   winW = 1280, winH = 800;
 
-// fixed camera
-float camX = 0.0f,  camY = 14.0f, camZ = 50.0f;
-float lookX = 0.0f, lookY = 11.0f, lookZ = -12.0f;
+// orbit camera (target point, distance, yaw/pitch in degrees)
+struct Cam { float tx, ty, tz, d, yaw, pitch; };
+static const Cam VIEWS[6] = {
+    {0.0f, 11.0f, -12.0f, 74.0f, 0.0f, 3.5f},      // 1 whole park
+    {-3.0f, 3.5f, 2.0f, 24.0f, 0.0f, 14.0f},       // 2 merry-go-round
+    {-19.0f, 11.0f, -5.0f, 40.0f, 14.0f, 8.0f},    // 3 Ferris wheel
+    {4.0f, 8.0f, -21.0f, 56.0f, 0.0f, 10.0f},      // 4 roller coaster
+    {20.0f, 5.0f, -1.0f, 30.0f, -12.0f, 10.0f},    // 5 circus tent
+    {27.5f, 2.5f, 15.5f, 22.0f, -18.0f, 12.0f}};   // 6 ice cream truck
+Cam camCur = VIEWS[0], camTgt = VIEWS[0];
+float camX = 0, camY = 15, camZ = 62, lookX = 0, lookY = 11, lookZ = -12;
 
 // animation values
 float ferrisAngle = 0.0f, carouselAngle = 0.0f, coasterS = 0.0f;
@@ -154,6 +176,9 @@ std::vector<Cloud>   clouds;
 std::vector<Bird>    birds;
 std::vector<Bldg>    cityNear, cityFar;
 std::vector<Tree>    trees;
+std::vector<P3>      stars;
+struct Lantern { float x, y, z, speed, phase; };
+std::vector<Lantern> lanterns;
 
 // ------------------------- roller-coaster track ----------------------
 static const float CX = 4.0f, CZ = -21.0f, RX = 24.0f, RZ = 9.0f;
@@ -244,7 +269,7 @@ void initScene() {
     // clouds (far, high in the sky)
     for (int i = 0; i < 8; i++) {
         Cloud c;
-        c.x = -75.0f + i * 20.0f; c.y = 38.0f + (i % 3) * 4.0f; c.z = -46.0f - (i % 3) * 8.0f;
+        c.x = -75.0f + i * 20.0f; c.y = 47.0f + (i % 3) * 4.5f; c.z = -50.0f - (i % 3) * 8.0f;
         c.speed = 0.02f + (i % 3) * 0.008f; c.scale = 2.0f + (i % 2) * 0.8f;
         clouds.push_back(c);
     }
@@ -262,22 +287,33 @@ void initScene() {
       while (x < 160.0f) { Bldg b; b.w = 8.0f + rand() % 8; b.h = 26.0f + rand() % 22; b.d = 8.0f; b.z = -100.0f; b.x = x + b.w / 2; b.jit = ((rand() % 100) / 100.0f - 0.5f) * 0.06f; b.id = id++; cityFar.push_back(b); x += b.w + 1.0f + rand() % 4; }
     }
     // trees: two staggered rows behind the lamps + a few at the sides
-    for (float x = -105.0f; x <= 105.0f; x += 5.5f) { Tree t; t.x = x + (rand() % 20) / 10.0f; t.z = -41.0f; t.s = 0.9f + (rand() % 5) * 0.08f; t.pal = rand() % 5; trees.push_back(t); }
-    for (float x = -102.0f; x <= 105.0f; x += 6.0f) { Tree t; t.x = x; t.z = -47.0f; t.s = 1.1f + (rand() % 5) * 0.08f; t.pal = rand() % 5; trees.push_back(t); }
-    float sideT[6][2] = {{-38, -14}, {-39, 2}, {-37, 16}, {38, -14}, {39, 4}, {37, 17}};
-    for (int i = 0; i < 6; i++) { Tree t; t.x = sideT[i][0]; t.z = sideT[i][1]; t.s = 1.0f; t.pal = i % 5; trees.push_back(t); }
+    for (float x = -100.0f; x <= 100.0f; x += 25.0f) { Tree t; t.x = x + (rand() % 60) / 10.0f; t.z = -43.0f; t.s = 1.0f + (rand() % 5) * 0.08f; t.pal = rand() % 5; trees.push_back(t); }   // just a few trees
 
     buildTrack();
     initRunners();
+    for (int i = 0; i < 260; i++) {                          // stars
+        P3 st; float e = 0.1f + (rand() % 1000) / 1000.0f * 1.35f, lon = (rand() % 1000) / 1000.0f * 2 * PI_F;
+        st.x = cosf(e) * cosf(lon); st.y = sinf(e); st.z = cosf(e) * sinf(lon); st.t = (float)(rand() % 100);
+        stars.push_back(st);
+    }
+    for (int i = 0; i < 16; i++) {                           // sky lanterns
+        Lantern l; l.x = -45.0f + rand() % 90; l.y = 2.0f + rand() % 55; l.z = -15.0f - rand() % 40;
+        l.speed = 0.025f + (rand() % 20) * 0.002f; l.phase = (float)(rand() % 100);
+        lanterns.push_back(l);
+    }
 }
 
 // ------------------------- sky, sun ----------------------------------
 static void skyColors(float* hor, float* top) {
     const float dh[3] = {0.74f, 0.89f, 1.00f}, dt[3] = {0.20f, 0.50f, 0.95f};
     const float sh[3] = {1.00f, 0.60f, 0.22f}, st[3] = {0.45f, 0.30f, 0.60f};
-    lerp3(dh, sh, dusk, hor); lerp3(dt, st, dusk, top);
+    const float nh[3] = {0.10f, 0.16f, 0.36f}, nt[3] = {0.015f, 0.03f, 0.13f};   // navy night sky
+    float h1[3], t1[3];
+    lerp3(dh, sh, dusk, h1); lerp3(dt, st, dusk, t1);
+    lerp3(h1, nh, night, hor); lerp3(t1, nt, night, top);
 }
-static void sunPos(float& x, float& y, float& z) { x = 10.0f; y = lerpf(66.0f, 25.0f, dusk); z = -110.0f; }
+static void sunPos(float& x, float& y, float& z)  { x = 10.0f;  y = lerpf(lerpf(66.0f, 25.0f, dusk), -30.0f, night); z = -110.0f; }
+static void moonPos(float& x, float& y, float& z) { x = -32.0f; y = lerpf(-25.0f, 60.0f, night); z = -110.0f; }
 
 void drawSkyDome() {
     float hor[3], top[3]; skyColors(hor, top);
@@ -303,12 +339,24 @@ void drawSkyDome() {
                 float f = powf(e > 0 ? e / (PI_F / 2) : 0.0f, 0.55f);
                 float c[3]; lerp3(hor, top, f, c);
                 float dt = dx * sd[0] + dy * sd[1] + dz * sd[2]; if (dt < 0) dt = 0;
-                float glow = powf(dt, 10.0f) * (0.25f + 0.5f * dusk) + powf(dt, 3.0f) * 0.35f * dusk;
+                float glow = (powf(dt, 10.0f) * (0.25f + 0.5f * dusk) + powf(dt, 3.0f) * 0.35f * dusk) * (1.0f - night);
                 glColor3f(clamp01(c[0] + glow), clamp01(c[1] + glow * 0.55f), clamp01(c[2] + glow * 0.18f));
                 glVertex3f(R * dx, R * dy, R * dz);
             }
         }
         glEnd();
+    }
+    if (night > 0.02f) {                                      // twinkling stars
+        glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glPointSize(2.0f);
+        glBegin(GL_POINTS);
+        for (size_t i = 0; i < stars.size(); i++) {
+            float tw = 0.55f + 0.45f * sinf(globalTime * 3.0f + stars[i].t);
+            glColor4f(1.0f, 1.0f, 0.92f, night * tw);
+            glVertex3f(190.0f * stars[i].x, 190.0f * stars[i].y, 190.0f * stars[i].z);
+        }
+        glEnd();
+        glDisable(GL_BLEND); glPointSize(1.0f);
     }
     glEnable(GL_LIGHTING);
     glDepthMask(GL_TRUE);
@@ -317,6 +365,7 @@ void drawSkyDome() {
 
 void drawSun() {
     float sx, sy, sz; sunPos(sx, sy, sz);
+    if (sy < -14.0f) return;
     float pulse = 0.5f + 0.5f * sinf(sunPulse);
     float r = lerpf(8.0f, 10.0f, dusk);
     const float cd[3] = {1.0f, 0.95f, 0.50f}, cs[3] = {1.0f, 0.45f, 0.12f};
@@ -338,12 +387,31 @@ void drawSun() {
         float a = i * 2 * PI_F / 16, w = 0.10f;
         float len = r * ((i % 2) ? 2.2f : 3.0f) * (1.0f + 0.15f * pulse);
         glColor4f(c[0], c[1], c[2], 0.28f);
-        glVertex3f(r * 1.0f * cosf(a - w), r * sinf(a - w), 0);
-        glVertex3f(r * 1.0f * cosf(a + w), r * sinf(a + w), 0);
+        glVertex3f(r * cosf(a - w), r * sinf(a - w), 0);
+        glVertex3f(r * cosf(a + w), r * sinf(a + w), 0);
         glColor4f(c[0], c[1], c[2], 0.0f);
         glVertex3f(len * cosf(a), len * sinf(a), 0);
     }
     glEnd();
+    endGlow();
+    glPopMatrix();
+}
+
+void drawMoon() {
+    if (night < 0.01f) return;
+    float mx, my, mz; moonPos(mx, my, mz);
+    const float halo[3] = {0.7f, 0.8f, 1.0f};
+    glPushMatrix();
+    glTranslatef(mx, my, mz);
+    glDisable(GL_LIGHTING);
+    glColor3f(0.96f, 0.96f, 0.88f);
+    glutSolidSphere(7.0, 28, 28);
+    glColor3f(0.84f, 0.84f, 0.76f);                         // craters
+    ballAt(-1.8f, 1.8f, 6.4f, 1.1f, 10); ballAt(2.2f, -1.0f, 6.4f, 1.5f, 10); ballAt(-0.5f, -3.0f, 6.2f, 0.8f, 10); ballAt(2.8f, 3.0f, 5.9f, 0.7f, 10);
+    beginGlow();
+    glColor4f(halo[0], halo[1], halo[2], 0.18f * night); glutSolidSphere(10.0, 20, 20);
+    glColor4f(halo[0], halo[1], halo[2], 0.10f * night); glutSolidSphere(15.0, 20, 20);
+    glColor4f(halo[0], halo[1], halo[2], 0.05f * night); glutSolidSphere(24.0, 20, 20);
     endGlow();
     glPopMatrix();
 }
@@ -353,6 +421,7 @@ void drawCity() {
     float hor[3], top[3]; skyColors(hor, top);
     const float dd[3] = {0.30f, 0.38f, 0.52f}, ds[3] = {0.24f, 0.10f, 0.20f};
     float dark[3]; lerp3(dd, ds, dusk, dark);
+    { const float dn[3] = {0.04f, 0.06f, 0.14f}; lerp3(dark, dn, night, dark); }
     glDisable(GL_LIGHTING);
     for (int layer = 1; layer >= 0; layer--) {
         const std::vector<Bldg>& v = layer ? cityFar : cityNear;
@@ -400,8 +469,22 @@ void drawGround() {
     glColor3f(0.45f, 0.43f, 0.42f);                       // promenade where the lamps stand
     glVertex3f(-300, 0.02f, -37); glVertex3f(300, 0.02f, -37); glVertex3f(300, 0.02f, -31); glVertex3f(-300, 0.02f, -31);
     glColor3f(0.64f, 0.57f, 0.50f);                       // park plaza
-    glVertex3f(-40, 0.03f, -8); glVertex3f(40, 0.03f, -8); glVertex3f(40, 0.03f, 24); glVertex3f(-40, 0.03f, 24);
+    glVertex3f(-90, 0.03f, -31); glVertex3f(90, 0.03f, -31); glVertex3f(90, 0.03f, 26); glVertex3f(-90, 0.03f, 26);
     glEnd();
+}
+
+void drawFence() {                                       // park boundary fence (gives the "amusement park grounds" look)
+    const float z = -32.0f;
+    float level = 0.2f + 0.9f * dusk;
+    glColor3f(0.97f, 0.97f, 0.97f);
+    glPushMatrix(); glTranslatef(0, 0.95f, z); box(210.0f, 0.12f, 0.12f); glPopMatrix();
+    glPushMatrix(); glTranslatef(0, 0.45f, z); box(210.0f, 0.1f, 0.1f); glPopMatrix();
+    for (int i = 0; i <= 70; i++) {
+        float x = -105.0f + i * 3.0f;
+        if (i % 2) glColor3f(0.9f, 0.2f, 0.25f); else glColor3f(0.25f, 0.5f, 0.9f);
+        glPushMatrix(); glTranslatef(x, 0.65f, z); box(0.26f, 1.3f, 0.26f); glPopMatrix();
+        if (dusk > 0.05f) bulb(x + 1.5f, 1.12f, z + 0.1f, 0.09f, BULB_COL[i % 4], level * (0.7f + 0.3f * sinf(globalTime * 4 + i)), false);
+    }
 }
 
 void drawTrees() {
@@ -445,12 +528,13 @@ void drawLamp(float x, float z) {
     glPopMatrix();
 }
 void drawLamps() {
+    if (!showLamps) return;
     for (float x = -108.0f; x <= 108.0f; x += 9.0f) drawLamp(x, -34.0f);
 }
 
 void drawFlowers() {
     for (float fx = -36.0f; fx <= 36.0f; fx += 2.2f) {
-        if (fabsf(fx - 20.0f) < 9.0f || fabsf(fx + 24.0f) < 7.0f) continue;
+        if (fabsf(fx - 20.0f) < 9.0f || fabsf(fx + 19.0f) < 8.0f || fabsf(fx) > 28.0f) continue;
         glPushMatrix();
         glTranslatef(fx, 0.25f, -8.8f);
         glColor3f(0.95f, 0.25f, 0.45f); glutSolidSphere(0.32, 8, 8);
@@ -464,6 +548,7 @@ void drawFlowers() {
 void drawClouds() {
     const float c0[3] = {1.0f, 1.0f, 1.0f}, c1[3] = {1.0f, 0.74f, 0.60f};
     float c[3]; lerp3(c0, c1, dusk, c);
+    { const float cn[3] = {0.20f, 0.24f, 0.42f}; lerp3(c, cn, night, c); }
     static const float puff[7][5] = {{0, 0, 0, 2.2f, 1.0f}, {1.9f, -0.2f, 0.2f, 1.7f, 0.97f}, {-1.9f, -0.3f, 0.1f, 1.6f, 0.96f}, {0.8f, 0.8f, 0, 1.5f, 1.0f}, {-0.9f, 0.6f, 0.1f, 1.4f, 1.0f}, {3.3f, -0.5f, 0, 1.1f, 0.94f}, {-3.2f, -0.5f, 0, 1.0f, 0.94f}};
     glDisable(GL_LIGHTING);
     for (size_t i = 0; i < clouds.size(); i++) {
@@ -481,6 +566,7 @@ void drawClouds() {
 }
 
 void drawBirds() {
+    if (night > 0.5f) return;
     glDisable(GL_LIGHTING);
     glColor3f(0.12f, 0.12f, 0.16f);
     for (size_t i = 0; i < birds.size(); i++) {
@@ -517,6 +603,7 @@ void drawHotAirBalloon() {
     glBegin(GL_LINES);
     for (int x = -1; x <= 1; x += 2) for (int z = -1; z <= 1; z += 2) { glVertex3f(x * 0.6f, 0.5f, z * 0.6f); glVertex3f(x * 1.3f, 2.9f, z * 1.3f); }
     glEnd();
+    if (dusk > 0.3f) { const float fl[3] = {1.0f, 0.65f, 0.2f}; bulb(0, 2.7f, 0, 0.25f, fl, 0.7f + 0.3f * sinf(globalTime * 11.0f), true); }
     glTranslatef(0, 5.3f, 0);
     glScalef(1.0f, 1.2f, 1.0f);
     stripedSphere(3.2f, 12, 10, c1, c2);                   // striped envelope
@@ -589,7 +676,7 @@ void drawCircusTent() {
 // ------------------------- Ferris wheel ------------------------------
 void drawFerrisWheel() {
     glPushMatrix();
-    glTranslatef(-24.0f, 0.0f, -4.0f);
+    glTranslatef(-19.0f, 0.0f, -5.0f);
     glRotatef(15.0f, 0, 1, 0);
     const float hubY = 13.5f, radius = 9.5f;
     float level = 0.2f + 0.9f * dusk;
@@ -886,18 +973,18 @@ void drawJoker() {
 const int NRUN = 12;
 struct Runner { float z, xmin, xmax, speed; float shirt[3], pants[3], hair[3]; int pose, girl; float x, dir, yaw, phase; };
 static Runner runners[NRUN] = {
-    {20.0f, -22, 22, 0.080f, {0.2f, 0.4f, 0.95f}, {0.2f, 0.2f, 0.5f}, {0.3f, 0.2f, 0.1f}, 0, 0},
-    {19.0f, -22, 22, 0.065f, {1.0f, 0.85f, 0.2f}, {0.9f, 0.3f, 0.5f}, {0.1f, 0.1f, 0.1f}, 3, 1},
-    {12.0f, -17, 2,  0.070f, {0.9f, 0.2f, 0.2f}, {0.2f, 0.3f, 0.6f}, {0.8f, 0.55f, 0.2f}, 1, 0},
-    {12.8f, -17, 2,  0.055f, {0.2f, 0.75f, 0.3f}, {0.3f, 0.3f, 0.35f}, {0.2f, 0.1f, 0.05f}, 0, 0},
-    {-6.0f, -10, 11, 0.060f, {0.95f, 0.5f, 0.1f}, {0.2f, 0.25f, 0.5f}, {0.4f, 0.25f, 0.1f}, 1, 0},
-    {-5.0f, -10, 11, 0.075f, {0.95f, 0.4f, 0.7f}, {0.9f, 0.6f, 0.8f}, {0.6f, 0.35f, 0.1f}, 0, 1},
-    {8.0f, -24, -10, 0.060f, {0.4f, 0.8f, 0.95f}, {0.5f, 0.2f, 0.2f}, {0.1f, 0.1f, 0.1f}, 3, 0},
-    {9.0f, -24, -10, 0.070f, {0.7f, 0.3f, 0.9f}, {0.2f, 0.2f, 0.3f}, {0.9f, 0.7f, 0.2f}, 1, 1},
+    {20.5f, -26, 22, 0.085f, {0.2f, 0.4f, 0.95f}, {0.2f, 0.2f, 0.5f}, {0.3f, 0.2f, 0.1f}, 0, 0},
+    {19.2f, -26, 22, 0.070f, {1.0f, 0.85f, 0.2f}, {0.9f, 0.3f, 0.5f}, {0.1f, 0.1f, 0.1f}, 3, 1},
+    {12.8f, -21.5f, 18, 0.070f, {0.9f, 0.2f, 0.2f}, {0.2f, 0.3f, 0.6f}, {0.8f, 0.55f, 0.2f}, 1, 0},
+    {11.8f, -21.5f, 18, 0.055f, {0.2f, 0.75f, 0.3f}, {0.3f, 0.3f, 0.35f}, {0.2f, 0.1f, 0.05f}, 0, 0},
+    {-6.0f, -12, 12, 0.060f, {0.95f, 0.5f, 0.1f}, {0.2f, 0.25f, 0.5f}, {0.4f, 0.25f, 0.1f}, 1, 0},
+    {-5.0f, -12, 12, 0.075f, {0.95f, 0.4f, 0.7f}, {0.9f, 0.6f, 0.8f}, {0.6f, 0.35f, 0.1f}, 0, 1},
+    {9.5f, -22, -12, 0.060f, {0.4f, 0.8f, 0.95f}, {0.5f, 0.2f, 0.2f}, {0.1f, 0.1f, 0.1f}, 3, 0},
+    {10.5f, -22, -12, 0.070f, {0.7f, 0.3f, 0.9f}, {0.2f, 0.2f, 0.3f}, {0.9f, 0.7f, 0.2f}, 1, 1},
     {17.5f, -12, 8,  0.090f, {0.95f, 0.85f, 0.2f}, {0.2f, 0.4f, 0.7f}, {0.15f, 0.1f, 0.05f}, 1, 0},
     {16.0f, -12, 8,  0.065f, {0.95f, 0.3f, 0.3f}, {0.25f, 0.25f, 0.6f}, {0.3f, 0.2f, 0.1f}, 0, 1},
-    {2.5f, 4, 11.5f, 0.050f, {0.3f, 0.85f, 0.5f}, {0.3f, 0.3f, 0.6f}, {0.2f, 0.1f, 0.1f}, 3, 0},
-    {3.2f, 4, 11.5f, 0.060f, {0.95f, 0.6f, 0.2f}, {0.7f, 0.2f, 0.5f}, {0.5f, 0.3f, 0.1f}, 1, 1}};
+    {1.5f, 4, 12, 0.050f, {0.3f, 0.85f, 0.5f}, {0.3f, 0.3f, 0.6f}, {0.2f, 0.1f, 0.1f}, 3, 0},
+    {2.2f, 4, 12, 0.060f, {0.95f, 0.6f, 0.2f}, {0.7f, 0.2f, 0.5f}, {0.5f, 0.3f, 0.1f}, 1, 1}};
 
 void initRunners() {
     for (int i = 0; i < NRUN; i++) {
@@ -960,7 +1047,7 @@ void drawKid(const Runner& k) {
 // running girl with a dripping ice cream
 void drawRunningGirl() {
     float a = globalTime * 0.45f;
-    float px = 8.0f + 3.5f * cosf(a), pz = 8.0f + 3.5f * sinf(a);
+    float px = 8.0f + 3.5f * cosf(a), pz = 7.0f + 3.5f * sinf(a);
     float yaw = atan2f(-sinf(a), cosf(a)) * DEG;
     float phase = globalTime * 9.0f;
     const float SC = 1.5f;
@@ -1033,7 +1120,7 @@ void drawRunningGirl() {
 void drawIceCreamTruck() {
     bool signOn = fmodf(globalTime, 1.4f) < 0.8f;
     glPushMatrix();
-    glTranslatef(22.5f, 0, 9.5f);
+    glTranslatef(27.5f, 0, 15.5f);
     glRotatef(-12.0f, 0, 1, 0);
     glScalef(1.25f, 1.25f, 1.25f);
     const float cream[3] = {0.98f, 0.93f, 0.95f};
@@ -1091,26 +1178,363 @@ void drawIceCreamTruck() {
     glPopMatrix();
 }
 
+// ------------------------- static people, chairs, food stalls -----------
+static const float PAL[8][3]  = {{0.9f, 0.2f, 0.2f}, {0.2f, 0.45f, 0.95f}, {0.95f, 0.8f, 0.2f}, {0.25f, 0.75f, 0.35f}, {0.95f, 0.45f, 0.7f}, {0.6f, 0.3f, 0.85f}, {0.95f, 0.55f, 0.15f}, {0.3f, 0.8f, 0.85f}};
+static const float HAIRC[4][3] = {{0.1f, 0.08f, 0.06f}, {0.4f, 0.25f, 0.1f}, {0.85f, 0.65f, 0.25f}, {0.55f, 0.2f, 0.1f}};
+static const float JEANC[3][3] = {{0.2f, 0.3f, 0.6f}, {0.25f, 0.25f, 0.3f}, {0.5f, 0.3f, 0.2f}};
+
+// pose: 0 arms down, 1 holding an ice cream, 2 both arms forward, 3 eating (hand to mouth)
+void drawPerson(float x, float y, float z, float yaw, float sc, const float* shirt, const float* pants, const float* hair, int pose, int girl, bool seated = false) {
+    glPushMatrix();
+    glTranslatef(x, y, z);
+    glRotatef(yaw, 0, 1, 0);
+    glScalef(sc, sc, sc);
+    col3(pants);
+    for (int s = -1; s <= 1; s += 2) {
+        if (seated) { limb(s * 0.12f, 0.45f, 0, s * 0.12f, 0.5f, 0.45f, 0.09f); limb(s * 0.12f, 0.5f, 0.45f, s * 0.12f, 0.08f, 0.5f, 0.09f); }
+        else limb(s * 0.12f, 0.85f, 0, s * 0.12f, 0.08f, 0, 0.09f);
+        glColor3f(0.15f, 0.15f, 0.15f);
+        glPushMatrix(); glTranslatef(s * 0.12f, 0.04f, seated ? 0.55f : 0.06f); box(0.16f, 0.08f, 0.28f); glPopMatrix();
+        col3(pants);
+    }
+    glPushMatrix();
+    glTranslatef(0, seated ? -0.42f : 0.0f, 0);
+    col3(shirt);
+    glPushMatrix(); glTranslatef(0, 1.2f, 0); box(0.5f, 0.65f, 0.3f); glPopMatrix();
+    if (girl) { col3(pants); glPushMatrix(); glTranslatef(0, 0.78f, 0); glRotatef(-90, 1, 0, 0); glutSolidCone(0.38, 0.45, 10, 1); glPopMatrix(); }
+    glColor3f(1.0f, 0.78f, 0.62f);
+    glPushMatrix(); glTranslatef(0, 1.8f, 0); glutSolidSphere(0.26, 14, 14);
+    col3(hair); glPushMatrix(); glTranslatef(0, 0.07f, -0.05f); glScalef(1.0f, 0.85f, 1.0f); glutSolidSphere(0.28, 12, 12); glPopMatrix();
+    glColor3f(0.05f, 0.05f, 0.05f); ballAt(-0.09f, 0.0f, 0.23f, 0.035f, 6); ballAt(0.09f, 0.0f, 0.23f, 0.035f, 6);
+    glPopMatrix();
+    float lx = -0.34f, ly = 0.9f, lz = 0.05f, rx = 0.34f, ry = 0.9f, rz = 0.05f;
+    if (pose == 1) { rx = 0.3f; ry = 1.3f; rz = 0.5f; }
+    if (pose == 2) { lx = -0.25f; ly = 1.2f; lz = 0.55f; rx = 0.25f; ry = 1.2f; rz = 0.55f; }
+    if (pose == 3) { rx = 0.15f; ry = 1.62f; rz = 0.28f; }
+    col3(shirt);
+    limb(-0.3f, 1.45f, 0, lx, ly, lz, 0.07f); limb(0.3f, 1.45f, 0, rx, ry, rz, 0.07f);
+    glColor3f(1.0f, 0.78f, 0.62f);
+    ballAt(lx, ly, lz, 0.08f, 8); ballAt(rx, ry, rz, 0.08f, 8);
+    if (pose == 1) {                                          // ice cream in hand
+        glPushMatrix(); glTranslatef(rx, ry + 0.2f, rz); glColor3f(0.85f, 0.58f, 0.25f);
+        glPushMatrix(); glRotatef(90, 1, 0, 0); glutSolidCone(0.09, 0.32, 8, 1); glPopMatrix();
+        glColor3f(1.0f, 0.55f, 0.72f); ballAt(0, 0.07f, 0, 0.11f, 10);
+        glPopMatrix();
+    }
+    glPopMatrix();
+    glPopMatrix();
+}
+
+void drawChair(float x, float z, float yaw) {
+    glPushMatrix();
+    glTranslatef(x, 0, z);
+    glRotatef(yaw, 0, 1, 0);
+    glColor3f(0.55f, 0.35f, 0.2f);
+    glPushMatrix(); glTranslatef(0, 0.4f, 0); box(0.55f, 0.06f, 0.55f); glPopMatrix();
+    glPushMatrix(); glTranslatef(0, 0.75f, -0.26f); box(0.55f, 0.6f, 0.05f); glPopMatrix();
+    for (int a = -1; a <= 1; a += 2) for (int b = -1; b <= 1; b += 2) limb(a * 0.24f, 0, b * 0.24f, a * 0.24f, 0.4f, b * 0.24f, 0.03f, 6);
+    glPopMatrix();
+}
+
+void drawTableSet(float x, float z, int variant) {
+    static const float U[4][2][3] = {{{0.9f, 0.15f, 0.15f}, {1, 1, 1}}, {{0.2f, 0.5f, 0.95f}, {1, 1, 1}}, {{1.0f, 0.8f, 0.15f}, {1, 1, 1}}, {{0.2f, 0.7f, 0.35f}, {1, 1, 1}}};
+    float level = 0.2f + 0.9f * dusk;
+    glPushMatrix();
+    glTranslatef(x, 0, z);
+    glColor3f(0.4f, 0.4f, 0.45f); cylY(0.08f, 1.05f, 8);
+    glColor3f(0.9f, 0.85f, 0.75f); glPushMatrix(); glTranslatef(0, 1.05f, 0); cylY(1.0f, 0.08f, 20); glPopMatrix();
+    glColor3f(0.35f, 0.35f, 0.4f); cylY(0.05f, 3.2f, 8);                       // umbrella pole
+    stripedCone(2.3f, 3.0f, 0.9f, 8, U[variant % 4][0], U[variant % 4][1]);
+    for (int i = 0; i < 8; i++) { float a = i * 2 * PI_F / 8; bulb(2.3f * cosf(a), 3.0f, 2.3f * sinf(a), 0.07f, BULB_COL[i % 4], level, false); }
+    for (int k = 0; k < 4; k++) {                                              // chairs + diners
+        float a = k * PI_F / 2 + variant * 0.5f;
+        float cx = 1.7f * cosf(a), cz = 1.7f * sinf(a);
+        float yaw = atan2f(-cx, -cz) * DEG;
+        drawChair(cx, cz, yaw);
+        if (k < 3) drawPerson(cx, 0, cz, yaw, 1.3f, PAL[(variant * 3 + k) % 8], JEANC[k % 3], HAIRC[(k + variant) % 4], 3, (k + variant) % 2 == 0, true);
+    }
+    glColor3f(0.95f, 0.4f, 0.4f); ballAt(0.3f, 1.2f, 0.2f, 0.16f, 8);        // snacks on the table
+    glColor3f(0.9f, 0.75f, 0.3f); ballAt(-0.3f, 1.18f, -0.2f, 0.14f, 8);
+    glPopMatrix();
+}
+
+// type: 0 popcorn shop, 1 food shop, 2 balloon shop, 3 shooting range
+void drawShop(float x, float z, float yaw, int type) {
+    static const char* NAMES[4] = {"POPCORN", "FOOD SHOP", "BALLOONS", "SHOOTING"};
+    static const float AW[4][2][3] = {{{1.0f, 0.8f, 0.15f}, {0.9f, 0.15f, 0.15f}}, {{0.9f, 0.15f, 0.15f}, {1, 1, 1}},
+                                       {{0.25f, 0.55f, 0.95f}, {1, 1, 1}}, {{0.2f, 0.65f, 0.3f}, {1, 1, 1}}};
+    float level = 0.25f + 0.85f * dusk;
+    glPushMatrix();
+    glTranslatef(x, 0, z);
+    glRotatef(yaw, 0, 1, 0);
+    glColor3f(0.96f, 0.92f, 0.84f);                                           // walls
+    glPushMatrix(); glTranslatef(0, 1.8f, -1.0f); box(4.2f, 3.6f, 0.2f); glPopMatrix();
+    for (int sd = -1; sd <= 1; sd += 2) { glPushMatrix(); glTranslatef(sd * 2.05f, 1.8f, 0.1f); box(0.15f, 3.6f, 2.3f); glPopMatrix(); }
+    col3(AW[type][0]); glPushMatrix(); glTranslatef(0, 0.55f, 1.0f); box(4.2f, 1.1f, 0.9f); glPopMatrix();   // counter
+    glColor3f(0.55f, 0.38f, 0.22f); glPushMatrix(); glTranslatef(0, 1.13f, 1.0f); box(4.5f, 0.1f, 1.2f); glPopMatrix();
+    glBegin(GL_QUADS);                                                        // striped awning
+    for (int i = 0; i < 7; i++) {
+        float x0 = -2.2f + i * 0.63f, x1 = x0 + 0.63f;
+        col3(AW[type][i % 2]);
+        glNormal3f(0, 0.98f, 0.2f);
+        glVertex3f(x0, 3.9f, -1.1f); glVertex3f(x1, 3.9f, -1.1f); glVertex3f(x1, 3.3f, 1.8f); glVertex3f(x0, 3.3f, 1.8f);
+        glNormal3f(0, 0, 1);
+        glVertex3f(x0, 3.3f, 1.8f); glVertex3f(x1, 3.3f, 1.8f); glVertex3f(x1, 3.0f, 1.8f); glVertex3f(x0, 3.0f, 1.8f);
+    }
+    glEnd();
+    glColor3f(0.15f, 0.1f, 0.12f); glPushMatrix(); glTranslatef(0, 4.5f, -0.95f); box(3.7f, 0.8f, 0.12f); glPopMatrix();   // sign
+    glPushMatrix(); glTranslatef(0, 4.5f, -0.87f); signText(NAMES[type], 2.8f, 1.0f, 0.9f, 0.4f); glPopMatrix();
+    for (int i = 0; i < 9; i++) bulb(-2.2f + i * 0.55f, 3.0f, 1.82f, 0.07f, BULB_COL[i % 4], level, false);
+
+    switch (type) {
+        case 0:                                                               // popcorn machine + boxes
+            glColor3f(1.0f, 0.97f, 0.8f); glPushMatrix(); glTranslatef(-1.2f, 1.95f, 0.6f); box(1.2f, 1.5f, 0.8f); glPopMatrix();
+            glColor3f(0.9f, 0.15f, 0.15f); glPushMatrix(); glTranslatef(-1.2f, 2.8f, 0.6f); box(1.35f, 0.25f, 0.95f); glPopMatrix();
+            glColor3f(1.0f, 0.95f, 0.75f); for (int i = 0; i < 6; i++) ballAt(-1.2f + (i % 3) * 0.3f, 2.2f + (i / 3) * 0.3f, 0.7f, 0.17f, 8);
+            for (int i = 0; i < 3; i++) { glPushMatrix(); glTranslatef(0.3f + i * 0.6f, 1.18f, 1.0f); glColor3f(0.9f, 0.15f, 0.15f); cylY(0.22f, 0.45f, 10); glColor3f(1.0f, 0.95f, 0.75f); ballAt(0, 0.5f, 0, 0.24f, 8); glPopMatrix(); }
+            break;
+        case 1:                                                               // hot dogs + burgers
+            for (int i = 0; i < 3; i++) { float px = -1.6f + i * 0.75f; glColor3f(0.9f, 0.7f, 0.4f); glPushMatrix(); glTranslatef(px, 1.25f, 1.0f); box(0.55f, 0.14f, 0.22f); glPopMatrix(); glColor3f(0.8f, 0.2f, 0.15f); limb(px - 0.3f, 1.35f, 1.0f, px + 0.3f, 1.35f, 1.0f, 0.07f); }
+            for (int i = 0; i < 2; i++) { glPushMatrix(); glTranslatef(0.7f + i * 1.0f, 1.18f, 1.0f); glColor3f(0.85f, 0.6f, 0.3f); cylY(0.3f, 0.12f, 12); glTranslatef(0, 0.12f, 0); glColor3f(0.45f, 0.25f, 0.15f); cylY(0.32f, 0.1f, 12); glTranslatef(0, 0.1f, 0); glColor3f(0.3f, 0.75f, 0.25f); cylY(0.33f, 0.04f, 12); glTranslatef(0, 0.04f, 0); glColor3f(0.85f, 0.6f, 0.3f); cylY(0.3f, 0.14f, 12); glPopMatrix(); }
+            break;
+        case 2:                                                               // balloon bunches above the shop
+            for (int side = -1; side <= 1; side += 2) {
+                float ax = side * 1.7f;
+                for (int k = 0; k < 7; k++) {
+                    float ang = k * 0.9f + side, bx = ax + cosf(ang) * (0.4f + (k % 3) * 0.35f), bz = 0.3f + sinf(ang) * 0.7f;
+                    float by = 5.6f + (k % 3) * 0.7f + 0.12f * sinf(globalTime * 1.5f + k + side);
+                    glDisable(GL_LIGHTING); glColor3f(0.85f, 0.85f, 0.85f);
+                    glBegin(GL_LINES); glVertex3f(ax, 3.9f, 0.3f); glVertex3f(bx, by - 0.5f, bz); glEnd();
+                    glEnable(GL_LIGHTING);
+                    col3(PAL[(k + (side > 0 ? 3 : 0)) % 8]);
+                    glPushMatrix(); glTranslatef(bx, by, bz); glScalef(0.85f, 1.1f, 0.85f); glutSolidSphere(0.5, 12, 12); glPopMatrix();
+                }
+            }
+            for (int k = 0; k < 5; k++) { col3(PAL[(k * 3) % 8]); glPushMatrix(); glTranslatef(-1.6f + k * 0.8f, 1.5f, 1.0f); glScalef(0.9f, 1.1f, 0.9f); glutSolidSphere(0.32, 10, 10); glPopMatrix(); }
+            break;
+        default:                                                              // shooting range: targets, plush prizes, rifles
+            for (int t = 0; t < 3; t++) {
+                float tx = -1.3f + t * 1.3f;
+                glPushMatrix(); glTranslatef(tx, 2.6f, -0.88f);
+                glColor3f(0.9f, 0.1f, 0.1f); glutSolidCylinder(0.62, 0.03, 18, 1);
+                glTranslatef(0, 0, 0.01f); glColor3f(1, 1, 1); glutSolidCylinder(0.46, 0.03, 18, 1);
+                glTranslatef(0, 0, 0.01f); glColor3f(0.9f, 0.1f, 0.1f); glutSolidCylinder(0.3, 0.03, 18, 1);
+                glTranslatef(0, 0, 0.01f); glColor3f(1, 1, 1); glutSolidCylinder(0.16, 0.03, 18, 1);
+                glPopMatrix();
+            }
+            for (int side = -1; side <= 1; side += 2) {                       // plush bears
+                glPushMatrix(); glTranslatef(side * 1.75f, 1.45f, 1.0f); glColor3f(0.7f, 0.45f, 0.25f);
+                glutSolidSphere(0.3, 10, 10); ballAt(0, 0.38f, 0, 0.2f, 10); ballAt(-0.14f, 0.55f, 0, 0.07f, 8); ballAt(0.14f, 0.55f, 0, 0.07f, 8);
+                glPopMatrix();
+            }
+            glColor3f(0.25f, 0.25f, 0.28f);
+            limb(-0.5f, 1.3f, 1.4f, -0.5f, 1.3f, 0.6f, 0.04f); limb(0.5f, 1.3f, 1.4f, 0.5f, 1.3f, 0.6f, 0.04f);
+            break;
+    }
+    // vendor (chef hat) and two customers
+    drawPerson(0, 0, -0.1f, 0, 1.5f, PAL[(type * 2 + 1) % 8], JEANC[type % 3], HAIRC[type % 4], 2, 0);
+    glColor3f(1, 1, 1); glPushMatrix(); glTranslatef(0, 2.95f, -0.1f); cylY(0.3f, 0.3f, 10); ballAt(0, 0.35f, 0, 0.36f, 10); glPopMatrix();
+    drawPerson(-1.1f, 0, 2.8f, 180, 1.5f, PAL[(type + 2) % 8], JEANC[(type + 1) % 3], HAIRC[(type + 1) % 4], 2, 0);
+    drawPerson(0.9f, 0, 3.0f, 188, 1.5f, PAL[(type + 5) % 8], PAL[(type + 3) % 8], HAIRC[(type + 2) % 4], type == 2 ? 3 : 1, 1);
+    if (type == 3) { glColor3f(0.25f, 0.25f, 0.28f); limb(-1.1f, 1.95f, 2.6f, -1.1f, 1.95f, 1.2f, 0.05f); }          // customer aims a rifle
+    if (type == 2) {                                                          // customers hold balloons
+        for (int k = 0; k < 2; k++) {
+            float bx = k ? 0.9f : -1.1f, bz = k ? 3.0f : 2.8f;
+            glDisable(GL_LIGHTING); glColor3f(0.85f, 0.85f, 0.85f);
+            glBegin(GL_LINES); glVertex3f(bx, 2.0f, bz); glVertex3f(bx, 3.6f, bz); glEnd(); glEnable(GL_LIGHTING);
+            col3(PAL[k ? 4 : 0]); glPushMatrix(); glTranslatef(bx, 4.1f, bz); glScalef(0.85f, 1.1f, 0.85f); glutSolidSphere(0.5, 12, 12); glPopMatrix();
+        }
+    }
+    glPopMatrix();
+}
+
+void drawFoodCart(float x, float z, float yaw) {
+    float level = 0.25f + 0.85f * dusk;
+    const float red[3] = {0.9f, 0.15f, 0.15f}, white[3] = {1, 1, 1};
+    glPushMatrix();
+    glTranslatef(x, 0, z);
+    glRotatef(yaw, 0, 1, 0);
+    glColor3f(0.95f, 0.3f, 0.3f); glPushMatrix(); glTranslatef(0, 1.0f, 0); box(2.8f, 1.2f, 1.5f); glPopMatrix();
+    glColor3f(1, 1, 1);           glPushMatrix(); glTranslatef(0, 1.0f, 0); box(2.82f, 0.22f, 1.52f); glPopMatrix();
+    glColor3f(0.55f, 0.38f, 0.22f); glPushMatrix(); glTranslatef(0, 1.65f, 0); box(3.0f, 0.08f, 1.7f); glPopMatrix();
+    glColor3f(0.08f, 0.08f, 0.1f);
+    for (int sd = -1; sd <= 1; sd += 2) for (int zs = -1; zs <= 1; zs += 2) { glPushMatrix(); glTranslatef(sd * 0.9f, 0.5f, zs * 0.8f + (zs > 0 ? 0.0f : -0.15f)); glutSolidCylinder(0.5, 0.15, 14, 1); glPopMatrix(); }
+    glColor3f(0.3f, 0.3f, 0.33f); limb(-1.4f, 1.2f, 0, -2.3f, 1.55f, 0, 0.05f);                 // handle
+    glColor3f(0.35f, 0.35f, 0.4f); glPushMatrix(); glTranslatef(0.6f, 1.65f, -0.3f); cylY(0.05f, 1.8f, 8); glPopMatrix();   // umbrella
+    glPushMatrix(); glTranslatef(0.6f, 0, -0.3f); stripedCone(2.2f, 3.3f, 0.8f, 10, red, white); glPopMatrix();
+    for (int i = 0; i < 10; i++) { float a = i * 2 * PI_F / 10; bulb(0.6f + 2.2f * cosf(a), 3.3f, -0.3f + 2.2f * sinf(a), 0.07f, BULB_COL[i % 4], level, false); }
+    for (int i = 0; i < 4; i++) {                                                               // hot dogs on top
+        float px = -1.0f + i * 0.6f;
+        glColor3f(0.9f, 0.7f, 0.4f); glPushMatrix(); glTranslatef(px, 1.75f, 0.2f); box(0.5f, 0.12f, 0.2f); glPopMatrix();
+        glColor3f(0.8f, 0.2f, 0.15f); limb(px - 0.27f, 1.84f, 0.2f, px + 0.27f, 1.84f, 0.2f, 0.06f);
+    }
+    glColor3f(0.15f, 0.1f, 0.12f); glPushMatrix(); glTranslatef(0, 1.0f, 0.78f); box(2.2f, 0.5f, 0.05f); glPopMatrix();
+    glPushMatrix(); glTranslatef(0, 1.0f, 0.82f); signText("FOOD CART", 1.9f, 1.0f, 0.9f, 0.4f); glPopMatrix();
+    drawPerson(0.0f, 0, -1.2f, 0, 1.4f, PAL[1], JEANC[1], HAIRC[1], 2, 0);
+    drawPerson(0.4f, 0, 2.0f, 180, 1.5f, PAL[6], JEANC[0], HAIRC[2], 1, 1);
+    drawPerson(-1.0f, 0, 2.4f, 175, 1.3f, PAL[3], JEANC[2], HAIRC[0], 0, 0);
+    glPopMatrix();
+}
+
+struct ShopDef { float x, z, yaw; int type; };
+static const ShopDef shops[] = {                       // left and right edges of the park
+    {-33.0f, 1.0f, 55, 0}, {-33.0f, 8.5f, 55, 2}, {-31.5f, 16.0f, 45, 3},
+    {34.5f, 0.8f, -55, 1}, {34.5f, -6.5f, -55, 2}};
+
+struct CrowdDef { float x, z, yaw; int pose, girl, c1, c2, hair; };
+static const CrowdDef crowd[] = {
+    {-17.0f, 0.6f, 180, 0, 0, 0, 0, 0}, {-19.5f, 1.4f, 185, 1, 1, 4, 1, 1}, {-15.8f, 1.9f, 175, 0, 0, 2, 2, 2},   // Ferris wheel queue
+    {26.5f, 19.4f, 172, 1, 0, 1, 1, 3}, {28.6f, 19.9f, 182, 2, 1, 5, 0, 0}, {30.3f, 19.2f, 188, 1, 0, 6, 2, 1},   // at the truck window
+    {19.4f, 6.9f, 190, 0, 1, 7, 1, 2}, {22.2f, 6.7f, 170, 0, 0, 3, 0, 0}};                                        // at the tent door
+
+void drawStallsAndSeating() {
+    for (size_t i = 0; i < sizeof(shops) / sizeof(shops[0]); i++) drawShop(shops[i].x, shops[i].z, shops[i].yaw, shops[i].type);
+    drawFoodCart(33.0f, 8.0f, -55.0f);
+    drawTableSet(-26.0f, 10.0f, 0);
+    drawTableSet(26.0f, 10.5f, 1);
+    for (size_t i = 0; i < sizeof(crowd) / sizeof(crowd[0]); i++) {
+        const CrowdDef& c = crowd[i];
+        drawPerson(c.x, 0, c.z, c.yaw, 1.5f, PAL[c.c1], JEANC[c.c2 % 3], HAIRC[c.hair], c.pose, c.girl);
+    }
+}
+
+// ------------------------- fireworks + sky lanterns ---------------------
+struct Spark  { float x, y, z, vx, vy, vz, life, maxLife, r, g, b; };
+struct Rocket { float x, y, z, vy, ty, r, g, b; };
+std::vector<Spark>  sparks;
+std::vector<Rocket> rockets;
+float fwTimer = 20.0f;
+
+static void fwColor(int k, float* c) {
+    static const float P[6][3] = {{1.0f, 0.25f, 0.25f}, {1.0f, 0.85f, 0.2f}, {0.3f, 1.0f, 0.4f}, {0.3f, 0.6f, 1.0f}, {1.0f, 0.4f, 0.9f}, {0.9f, 0.95f, 1.0f}};
+    for (int i = 0; i < 3; i++) c[i] = P[k % 6][i];
+}
+static void launchRocket() {
+    Rocket r; r.x = -40.0f + rand() % 80; r.z = -52.0f - rand() % 12; r.y = 2.0f;
+    r.vy = 0.8f + (rand() % 30) * 0.01f; r.ty = 46.0f + rand() % 16;
+    float c[3]; fwColor(rand() % 6, c); r.r = c[0]; r.g = c[1]; r.b = c[2];
+    rockets.push_back(r);
+}
+static void explodeRocket(const Rocket& r) {
+    int kind = rand() % 3;
+    float c2[3]; fwColor(rand() % 6, c2);
+    for (int i = 0; i < 80 && sparks.size() < 2000; i++) {
+        Spark p; p.x = r.x; p.y = r.y; p.z = r.z;
+        float th = acosf(1.0f - 2.0f * (rand() % 1000) / 1000.0f), ph = 2 * PI_F * (rand() % 1000) / 1000.0f;
+        float sp = 0.30f + (rand() % 100) * 0.001f;
+        if (kind == 1) { p.vx = sp * cosf(ph); p.vy = sp * sinf(ph); p.vz = 0; }          // flat ring
+        else { p.vx = sp * sinf(th) * cosf(ph); p.vy = sp * cosf(th); p.vz = sp * sinf(th) * sinf(ph); }
+        p.maxLife = p.life = 70.0f + rand() % 35;
+        bool second = (kind == 2 && i % 2);
+        p.r = second ? c2[0] : r.r; p.g = second ? c2[1] : r.g; p.b = second ? c2[2] : r.b;
+        sparks.push_back(p);
+    }
+}
+void updateFireworks() {
+    if (night > 0.6f) { fwTimer -= 1.0f; if (fwTimer <= 0.0f) { launchRocket(); if (rand() % 4 == 0) launchRocket(); fwTimer = 35.0f + rand() % 60; } }
+    for (size_t i = 0; i < rockets.size();) {
+        Rocket& r = rockets[i];
+        r.y += r.vy;
+        if (sparks.size() < 2000) { Spark t; t.x = r.x; t.y = r.y; t.z = r.z; t.vx = (rand() % 20 - 10) * 0.002f; t.vy = -0.05f; t.vz = (rand() % 20 - 10) * 0.002f; t.maxLife = t.life = 16.0f; t.r = 1.0f; t.g = 0.7f; t.b = 0.3f; sparks.push_back(t); }
+        if (r.y >= r.ty) { explodeRocket(r); rockets.erase(rockets.begin() + i); } else i++;
+    }
+    for (size_t i = 0; i < sparks.size();) {
+        Spark& p = sparks[i];
+        p.x += p.vx; p.y += p.vy; p.z += p.vz;
+        p.vx *= 0.975f; p.vy = p.vy * 0.975f - 0.004f; p.vz *= 0.975f;
+        p.life -= 1.0f;
+        if (p.life <= 0.0f || p.y < 0.0f) sparks.erase(sparks.begin() + i); else i++;
+    }
+}
+void drawFireworks() {
+    if (sparks.empty() && rockets.empty()) return;
+    glDisable(GL_LIGHTING); glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE); glDepthMask(GL_FALSE);
+    glPointSize(3.0f);
+    glBegin(GL_POINTS);
+    for (size_t i = 0; i < sparks.size(); i++) { const Spark& p = sparks[i]; glColor4f(p.r, p.g, p.b, p.life / p.maxLife); glVertex3f(p.x, p.y, p.z); }
+    for (size_t i = 0; i < rockets.size(); i++) { glColor4f(1.0f, 0.9f, 0.6f, 1.0f); glVertex3f(rockets[i].x, rockets[i].y, rockets[i].z); }
+    glEnd();
+    glBegin(GL_LINES);                                                         // short glowing streaks
+    for (size_t i = 0; i < sparks.size(); i++) {
+        const Spark& p = sparks[i]; float a = p.life / p.maxLife;
+        glColor4f(p.r, p.g, p.b, a * 0.6f); glVertex3f(p.x, p.y, p.z);
+        glColor4f(p.r, p.g, p.b, 0.0f);     glVertex3f(p.x - p.vx * 4.0f, p.y - p.vy * 4.0f, p.z - p.vz * 4.0f);
+    }
+    glEnd();
+    glPointSize(1.0f);
+    endGlow();
+}
+
+void updateLanterns() {
+    for (size_t i = 0; i < lanterns.size(); i++) {
+        Lantern& l = lanterns[i];
+        l.y += l.speed;
+        if (l.y > 70.0f) { l.y = 2.0f; l.x = -45.0f + rand() % 90; l.z = -15.0f - rand() % 40; }
+    }
+}
+void drawLanterns() {
+    if (night < 0.03f) return;
+    const float orange[3] = {1.0f, 0.6f, 0.2f};
+    for (size_t i = 0; i < lanterns.size(); i++) {
+        const Lantern& l = lanterns[i];
+        float fl = 0.8f + 0.2f * sinf(globalTime * 5.0f + l.phase);
+        glPushMatrix();
+        glTranslatef(l.x + 2.5f * sinf(globalTime * 0.4f + l.phase), l.y, l.z);
+        glRotatef(sinf(globalTime * 0.7f + l.phase) * 8.0f, 0, 0, 1);
+        glScalef(2.2f * night, 2.2f * night, 2.2f * night);
+        setEmission(1.0f * fl, 0.55f * fl, 0.15f * fl);
+        glColor3f(1.0f, 0.62f, 0.22f);
+        glPushMatrix(); glTranslatef(0, 0.6f, 0); box(0.9f, 1.2f, 0.9f); glPopMatrix();
+        glPushMatrix(); glTranslatef(0, 1.2f, 0); glRotatef(-90, 1, 0, 0); glutSolidCone(0.64, 0.5, 4, 1); glPopMatrix();
+        clearEmission();
+        glPushMatrix(); glTranslatef(0, 0.6f, 0); glowHere(1.6f, orange, 0.5f * night * fl); glPopMatrix();
+        glPopMatrix();
+    }
+}
+
+// ------------------------- camera --------------------------------------
+static void zoomBy(float f) { camTgt.d *= f; if (camTgt.d < 6.0f) camTgt.d = 6.0f; if (camTgt.d > 110.0f) camTgt.d = 110.0f; }
+static void updateCamera() {
+    const float k = 0.09f;
+    camCur.tx += (camTgt.tx - camCur.tx) * k; camCur.ty += (camTgt.ty - camCur.ty) * k; camCur.tz += (camTgt.tz - camCur.tz) * k;
+    camCur.d += (camTgt.d - camCur.d) * k; camCur.yaw += (camTgt.yaw - camCur.yaw) * k; camCur.pitch += (camTgt.pitch - camCur.pitch) * k;
+    float yw = camCur.yaw / DEG, pt = camCur.pitch / DEG;
+    camX = camCur.tx + camCur.d * cosf(pt) * sinf(yw);
+    camY = camCur.ty + camCur.d * sinf(pt);
+    camZ = camCur.tz + camCur.d * cosf(pt) * cosf(yw);
+    lookX = camCur.tx; lookY = camCur.ty; lookZ = camCur.tz;
+}
+
 // ------------------------- HUD -----------------------------------------
 void drawHUD() {
-    const char* msg = "N: Day / Sunset    SPACE: Pause    ESC: Quit";
+    const char* modeName = mode == 0 ? "DAY" : (mode == 1 ? "SUNSET" : "NIGHT");
+    char l1[160];
+    sprintf(l1, "Mode: %s     D = day   S = sunset   N = night   M = next mode", modeName);
+    const char* l2 = "Zoom: mouse wheel or + / -     Rotate: drag mouse or arrow keys";
+    const char* l3 = "Views: 1 Park   2 Merry-go-round   3 Ferris wheel   4 Coaster   5 Tent   6 Ice-cream truck     SPACE pause   ESC quit";
+    const char* lines[3] = {l1, l2, l3};
     glDisable(GL_LIGHTING); glDisable(GL_DEPTH_TEST);
     glMatrixMode(GL_PROJECTION); glPushMatrix(); glLoadIdentity(); gluOrtho2D(0, winW, 0, winH);
     glMatrixMode(GL_MODELVIEW);  glPushMatrix(); glLoadIdentity();
     float c = lerpf(0.05f, 1.0f, dusk);
     glColor3f(c, c, c);
-    glRasterPos2i(14, winH - 24);
-    for (const char* p = msg; *p; ++p) glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *p);
+    for (int i = 0; i < 3; i++) {
+        glRasterPos2i(14, winH - 24 - i * 18);
+        for (const char* p = lines[i]; *p; ++p) glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *p);
+    }
     glPopMatrix(); glMatrixMode(GL_PROJECTION); glPopMatrix(); glMatrixMode(GL_MODELVIEW);
     glEnable(GL_DEPTH_TEST); glEnable(GL_LIGHTING);
 }
 
 // ------------------------- display -------------------------------------
 void setupLights() {
-    const float ad[4] = {0.42f, 0.44f, 0.48f, 1}, as[4] = {0.55f, 0.36f, 0.34f, 1};
-    const float dd[4] = {0.78f, 0.75f, 0.68f, 1}, ds[4] = {0.95f, 0.55f, 0.32f, 1};
+    const float ad[4] = {0.42f, 0.44f, 0.48f, 1}, as[4] = {0.55f, 0.36f, 0.34f, 1}, an[4] = {0.17f, 0.20f, 0.36f, 1};
+    const float dd[4] = {0.78f, 0.75f, 0.68f, 1}, ds[4] = {0.95f, 0.55f, 0.32f, 1}, dn[4] = {0.22f, 0.28f, 0.50f, 1};
     GLfloat amb[4], dif[4];
-    for (int i = 0; i < 4; i++) { amb[i] = lerpf(ad[i], as[i], dusk); dif[i] = lerpf(dd[i], ds[i], dusk); }
+    for (int i = 0; i < 4; i++) {
+        amb[i] = lerpf(lerpf(ad[i], as[i], dusk), an[i], night);
+        dif[i] = lerpf(lerpf(dd[i], ds[i], dusk), dn[i], night);
+    }
     GLfloat pos[4] = {0.3f, lerpf(0.9f, 0.55f, dusk), 0.8f, 0.0f};
     glLightfv(GL_LIGHT0, GL_POSITION, pos);
     glLightfv(GL_LIGHT0, GL_DIFFUSE, dif);
@@ -1126,12 +1550,14 @@ void display() {
 
     drawSkyDome();
     drawSun();
+    drawMoon();
     drawCity();
     setupLights();
     drawClouds();
     drawBirds();
     drawHotAirBalloon();
     drawGround();
+    drawFence();
     drawTrees();
     drawLamps();
     drawFlowers();
@@ -1140,21 +1566,26 @@ void display() {
     drawCircusTent();
     drawCarousel();
     drawIceCreamTruck();
+    drawStallsAndSeating();
     drawClown();
     drawJoker();
     for (int i = 0; i < NRUN; i++) drawKid(runners[i]);
     drawRunningGirl();
     drawFloatingBalloons();
+    drawLanterns();
+    drawFireworks();
     drawHUD();
     glutSwapBuffers();
 }
 
 // ------------------------- animation timer -----------------------------
 void update(int) {
-    // day <-> sunset transition (keeps running even when paused)
-    duskRaw += (targetSunset ? 1.0f : -1.0f) * 0.003f;
-    duskRaw = clamp01(duskRaw);
-    dusk = duskRaw * duskRaw * (3.0f - 2.0f * duskRaw);
+    // mode transitions (keep running even when paused)
+    duskRaw  += ((mode >= 1) ? 1.0f : -1.0f) * 0.003f;  duskRaw  = clamp01(duskRaw);
+    nightRaw += ((mode == 2) ? 1.0f : -1.0f) * 0.003f;  nightRaw = clamp01(nightRaw);
+    dusk  = duskRaw * duskRaw * (3.0f - 2.0f * duskRaw);
+    night = nightRaw * nightRaw * (3.0f - 2.0f * nightRaw);
+    updateCamera();
 
     if (!isPaused) {
         globalTime += 0.016f;
@@ -1164,6 +1595,8 @@ void update(int) {
         sunPulse += 0.03f;
         limbSwing += 0.06f;
         updateRunners();
+        updateFireworks();
+        updateLanterns();
 
         hotAirY += 0.02f;
         hotAirX += 0.01f * sinf(globalTime * 0.5f);
@@ -1187,29 +1620,65 @@ void reshape(int w, int h) {
     glViewport(0, 0, w, h);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(48.0, (double)w / (double)h, 1.0, 400.0);
+    gluPerspective(52.0, (double)w / (double)h, 0.5, 400.0);
     glMatrixMode(GL_MODELVIEW);
 }
 
+// ------------------------- input ---------------------------------------
+int lastMX = 0, lastMY = 0; bool dragging = false;
+
 void keyboard(unsigned char key, int, int) {
     switch (key) {
-        case 'n': case 'N': targetSunset = !targetSunset; break;
-        case 'd': case 'D': targetSunset = false; break;
-        case 's': case 'S': targetSunset = true; break;
+        case 'd': case 'D': mode = 0; break;
+        case 's': case 'S': mode = 1; break;
+        case 'n': case 'N': mode = 2; break;
+        case 'm': case 'M': mode = (mode + 1) % 3; break;
+        case 'l': case 'L': showLamps = !showLamps; break;
         case ' ': isPaused = !isPaused; break;
+        case '+': case '=': zoomBy(0.85f); break;
+        case '-': case '_': zoomBy(1.18f); break;
+        case '1': case '2': case '3': case '4': case '5': case '6': camTgt = VIEWS[key - '1']; break;
+        case '0': camTgt = VIEWS[0]; break;
         case 27: exit(0); break;
     }
 }
+void specialKeys(int key, int, int) {
+    switch (key) {
+        case GLUT_KEY_LEFT:  camTgt.yaw -= 6.0f; break;
+        case GLUT_KEY_RIGHT: camTgt.yaw += 6.0f; break;
+        case GLUT_KEY_UP:    camTgt.pitch += 3.0f; break;
+        case GLUT_KEY_DOWN:  camTgt.pitch -= 3.0f; break;
+    }
+    if (camTgt.yaw > 85.0f) camTgt.yaw = 85.0f;   if (camTgt.yaw < -85.0f) camTgt.yaw = -85.0f;
+    if (camTgt.pitch > 75.0f) camTgt.pitch = 75.0f; if (camTgt.pitch < 1.0f) camTgt.pitch = 1.0f;
+}
+void mouse(int button, int state, int x, int y) {
+    if (button == GLUT_LEFT_BUTTON) { dragging = (state == GLUT_DOWN); lastMX = x; lastMY = y; }
+}
+void motion(int x, int y) {
+    if (!dragging) return;
+    camTgt.yaw   -= (x - lastMX) * 0.3f;
+    camTgt.pitch += (y - lastMY) * 0.3f;
+    if (camTgt.yaw > 85.0f) camTgt.yaw = 85.0f;   if (camTgt.yaw < -85.0f) camTgt.yaw = -85.0f;
+    if (camTgt.pitch > 75.0f) camTgt.pitch = 75.0f; if (camTgt.pitch < 1.0f) camTgt.pitch = 1.0f;
+    lastMX = x; lastMY = y;
+}
+void mouseWheel(int, int dir, int, int) { zoomBy(dir > 0 ? 0.88f : 1.14f); }
 
 int main(int argc, char** argv) {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
     glutInitWindowSize(1280, 800);
-    glutCreateWindow("3D Amusement Park - Day & Sunset");
+    glutCreateWindow("3D Amusement Park - Day / Sunset / Night");
     initScene();
+    updateCamera();
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
     glutKeyboardFunc(keyboard);
+    glutSpecialFunc(specialKeys);
+    glutMouseFunc(mouse);
+    glutMotionFunc(motion);
+    glutMouseWheelFunc(mouseWheel);
     glutTimerFunc(16, update, 0);
     glutMainLoop();
     return 0;
