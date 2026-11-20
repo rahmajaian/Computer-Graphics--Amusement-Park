@@ -1,3 +1,17 @@
+// =====================================================================
+//  3D AMUSEMENT PARK  -  C++ / OpenGL / freeglut   (Code::Blocks)
+//
+//  Modes:  D = Day    S = Sunset    N = Night    M = next mode
+//  Zoom:   mouse wheel  or  + / -        Rotate: drag mouse or arrow keys
+//  Views:  1 Park   2 Merry-go-round   3 Ferris wheel   4 Roller coaster
+//          5 Circus tent   6 Ice-cream truck
+//  Other:  P = music on/off   SPACE = pause   L = show/hide far lamp row   ESC = quit
+//  (music uses the Windows PlaySound API -> link  -lwinmm)
+//
+//  Code::Blocks linker settings (Project > Build options > Linker settings):
+//      -lfreeglut  -lopengl32  -lglu32  -lwinmm  -lgdi32
+//  (in this order; make sure freeglut is installed for your MinGW)
+// =====================================================================
 #ifdef _WIN32
 #define NOMINMAX
 #include <windows.h>
@@ -442,41 +456,66 @@ void drawCity() {
 }
 
 // ------------------------- ground, trees, lamps -----------------------
+static float gateVis() { return clamp01((camCur.d - 84.0f) / 14.0f); }   // gate + front fence only show when zoomed far out
+
 void drawGround() {
-    static const float T[6][3] = {{1.0f, 0.45f, 0.70f}, {0.30f, 0.65f, 1.0f}, {1.0f, 0.85f, 0.30f}, {0.45f, 0.90f, 0.65f}, {0.70f, 0.50f, 1.0f}, {1.0f, 0.60f, 0.30f}};
     glBegin(GL_QUADS);
     glNormal3f(0, 1, 0);
-    glColor3f(0.20f, 0.55f, 0.20f);                       // grass
+    glColor3f(0.20f, 0.55f, 0.20f);                       // grass outside the park
     glVertex3f(-300, 0, -300); glVertex3f(300, 0, -300); glVertex3f(300, 0, 300); glVertex3f(-300, 0, 300);
-    glColor3f(0.80f, 0.74f, 0.92f);                       // lavender promenade
+    glColor3f(0.70f, 0.78f, 0.88f);                       // promenade at the back
     glVertex3f(-300, 0.02f, -37); glVertex3f(300, 0.02f, -37); glVertex3f(300, 0.02f, -31); glVertex3f(-300, 0.02f, -31);
-    glColor3f(0.98f, 0.96f, 0.92f);                       // plaza base (grout)
-    glVertex3f(-90, 0.03f, -31); glVertex3f(90, 0.03f, -31); glVertex3f(90, 0.03f, 26); glVertex3f(-90, 0.03f, 26);
-    const float ts = 4.0f, gap = 0.12f;                   // bright coloured tiles
-    for (int i = 0; i < 45; i++)
-        for (int j = 0; j < 14; j++) {
+    glColor3f(0.60f, 0.72f, 0.84f);                       // grout colour under the slabs
+    glVertex3f(-90, 0.03f, -31); glVertex3f(90, 0.03f, -31); glVertex3f(90, 0.03f, 35); glVertex3f(-90, 0.03f, 35);
+    const float ts = 6.0f, gap = 0.08f;                   // pale-blue concrete slabs
+    for (int i = 0; i < 30; i++)
+        for (int j = 0; j < 11; j++) {
+            unsigned int h = (unsigned int)((i * 73856093) ^ (j * 19349663)) & 0xFFFF;
+            float v = (h % 5) * 0.012f;
+            glColor3f(0.72f + v, 0.85f + v, 0.96f + v * 0.3f);
             float x0 = -90.0f + i * ts, z0 = -31.0f + j * ts;
-            col3(T[(i + 2 * j) % 6]);
             glVertex3f(x0 + gap, 0.045f, z0 + gap);      glVertex3f(x0 + gap, 0.045f, z0 + ts - gap);
             glVertex3f(x0 + ts - gap, 0.045f, z0 + ts - gap); glVertex3f(x0 + ts - gap, 0.045f, z0 + gap);
         }
     glEnd();
+    for (int i = 0; i < 30; i++)                          // a few small pink / yellow dots, spaced well apart
+        for (int j = 0; j < 11; j++) {
+            unsigned int h = (unsigned int)((i * 73856093) ^ (j * 19349663)) & 0xFFFF;
+            if (h % 4 != 0) continue;
+            float cx = -90.0f + i * 6.0f + 1.2f + ((h >> 2) % 37) / 37.0f * 3.6f;
+            float cz = -31.0f + j * 6.0f + 1.2f + ((h >> 5) % 31) / 31.0f * 3.6f;
+            if ((h >> 3) % 2) glColor3f(1.0f, 0.60f, 0.78f); else glColor3f(1.0f, 0.88f, 0.38f);
+            glBegin(GL_TRIANGLE_FAN);
+            glNormal3f(0, 1, 0);
+            glVertex3f(cx, 0.06f, cz);
+            for (int k = 0; k <= 16; k++) { float a = k * 2 * PI_F / 16; glVertex3f(cx + 0.6f * cosf(a), 0.06f, cz + 0.6f * sinf(a)); }
+            glEnd();
+        }
 }
 
-void drawFence() {                                       // park boundary fence (gives the "amusement park grounds" look)
-    const float z = -32.0f;
+static void fenceLine(float x1, float z1, float x2, float z2, bool lights, float sink) {
+    float dx = x2 - x1, dz = z2 - z1, len = sqrtf(dx * dx + dz * dz);
+    int n = (int)(len / 3.0f); if (n < 1) n = 1;
     float level = 0.2f + 0.9f * dusk;
     glColor3f(0.97f, 0.97f, 0.97f);
-    for (int sd = -1; sd <= 1; sd += 2) {
-        glPushMatrix(); glTranslatef(sd * 62.5f, 0.95f, z); box(85.0f, 0.12f, 0.12f); glPopMatrix();
-        glPushMatrix(); glTranslatef(sd * 62.5f, 0.45f, z); box(85.0f, 0.1f, 0.1f); glPopMatrix();
-    }
-    for (int i = 0; i <= 70; i++) {
-        float x = -105.0f + i * 3.0f;
-        if (fabsf(x) < 20.5f) continue;
+    limb(x1, 0.95f + sink, z1, x2, 0.95f + sink, z2, 0.06f, 6);
+    limb(x1, 0.45f + sink, z1, x2, 0.45f + sink, z2, 0.05f, 6);
+    for (int i = 0; i <= n; i++) {
+        float t = (float)i / n, x = x1 + dx * t, z = z1 + dz * t;
         if (i % 2) glColor3f(0.9f, 0.2f, 0.25f); else glColor3f(0.25f, 0.5f, 0.9f);
-        glPushMatrix(); glTranslatef(x, 0.65f, z); box(0.26f, 1.3f, 0.26f); glPopMatrix();
-        if (dusk > 0.05f) bulb(x + 1.5f, 1.12f, z + 0.1f, 0.09f, BULB_COL[i % 4], level * (0.7f + 0.3f * sinf(globalTime * 4 + i)), false);
+        glPushMatrix(); glTranslatef(x, 0.65f + sink, z); box(0.26f, 1.3f, 0.26f); glPopMatrix();
+        if (lights && dusk > 0.05f && i < n) bulb(x + dx / n * 0.5f, 1.12f + sink, z + dz / n * 0.5f + 0.1f, 0.09f, BULB_COL[i % 4], level * (0.7f + 0.3f * sinf(globalTime * 4 + i)), false);
+    }
+}
+
+void drawFence() {                                       // small fence around the whole park
+    float vis = gateVis(), sink = -(1.0f - vis) * 40.0f;
+    fenceLine(-88.0f, -32.0f, 88.0f, -32.0f, true, 0.0f);
+    fenceLine(-88.0f, -32.0f, -88.0f, 34.0f, false, 0.0f);
+    fenceLine(88.0f, -32.0f, 88.0f, 34.0f, false, 0.0f);
+    if (vis > 0.005f) {                                  // front fence with an opening for the gate
+        fenceLine(-88.0f, 34.0f, -21.0f, 34.0f, false, sink);
+        fenceLine(21.0f, 34.0f, 88.0f, 34.0f, false, sink);
     }
 }
 
@@ -522,7 +561,7 @@ void drawLamp(float x, float z) {
 }
 void drawLamps() {
     if (!showLamps) return;
-    for (float x = -108.0f; x <= 108.0f; x += 9.0f) { if (fabsf(x) < 22.0f) continue; drawLamp(x, -34.0f); }
+    for (float x = -108.0f; x <= 108.0f; x += 9.0f) drawLamp(x, -34.0f);
 }
 
 void drawFlowers() {
@@ -1469,46 +1508,45 @@ void drawFireworks() {
     endGlow();
 }
 
-// ------------------------- music (synthesised carnival tune) ------------
+// ------------------------- music (synthesised soft music-box tune) ------------
 static std::vector<unsigned char> wavData;
 static bool musicOn = false;
 struct Note { int midi; float beats; };
-static void addTone(std::vector<float>& buf, float start, float dur, float freq, int type, float amp) {
+static void addTone(std::vector<float>& buf, float start, float ring, float freq, int type, float amp) {
     const float SR = 22050.0f;
-    int s0 = (int)(start * SR), n = (int)((dur + 0.08f) * SR);
+    int s0 = (int)(start * SR), n = (int)(ring * SR);
     for (int i = 0; i < n; i++) {
         int idx = s0 + i; if (idx >= (int)buf.size()) break;
-        float t = i / SR, ph = 2.0f * PI_F * freq * t, env, v;
-        if (type == 2) env = expf(-t * 8.0f);
-        else { env = t < 0.006f ? t / 0.006f : 1.0f; if (t > dur) env *= fmaxf(0.0f, 1.0f - (t - dur) / 0.08f); }
-        if (type == 0) { ph *= 1.0f + 0.004f * sinf(2.0f * PI_F * 5.5f * t); v = sinf(ph) + 0.5f * sinf(2 * ph) + 0.28f * sinf(3 * ph) + 0.14f * sinf(4 * ph); }
-        else if (type == 1) v = (2.0f / PI_F) * asinf(sinf(ph));
-        else v = sinf(ph) + 0.33f * sinf(3 * ph) + 0.2f * sinf(5 * ph);
+        float t = i / SR, ph = 2.0f * PI_F * freq * t;
+        float env = (t < 0.004f ? t / 0.004f : 1.0f) * expf(-t * (type == 0 ? 2.4f : 3.4f));       // soft music-box decay
+        float v = sinf(ph) + 0.30f * sinf(2 * ph) + 0.10f * sinf(4 * ph);
         buf[idx] += v * env * amp;
     }
 }
 static void putU32(std::vector<unsigned char>& w, unsigned int v) { for (int i = 0; i < 4; i++) w.push_back((unsigned char)((v >> (8 * i)) & 255)); }
 static void putU16(std::vector<unsigned char>& w, unsigned int v) { for (int i = 0; i < 2; i++) w.push_back((unsigned char)((v >> (8 * i)) & 255)); }
-static void buildMusic() {
-    const float SR = 22050.0f, beat = 60.0f / 150.0f;
+static void buildMusic() {                                // gentle music-box lullaby in 3/4
+    const float SR = 22050.0f, beat = 60.0f / 88.0f;
     static const Note mel[] = {
-        {76, .5f}, {79, .5f}, {84, 1}, {83, .5f}, {79, .5f}, {76, 1}, {74, .5f}, {77, .5f}, {81, 1}, {79, .5f}, {77, .5f}, {76, 1},
-        {76, .5f}, {79, .5f}, {84, .5f}, {88, .5f}, {86, 1}, {83, 1}, {84, .5f}, {81, .5f}, {77, .5f}, {74, .5f}, {72, 2},
-        {79, .5f}, {81, .5f}, {83, .5f}, {84, .5f}, {86, 1}, {79, 1}, {89, .5f}, {88, .5f}, {86, .5f}, {84, .5f}, {83, 1}, {79, 1},
-        {81, .5f}, {84, .5f}, {88, 1}, {86, .5f}, {84, .5f}, {83, 1}, {84, .5f}, {79, .5f}, {76, .5f}, {79, .5f}, {72, 1.5f}, {0, .5f}};
-    static const int roots[16] = {36, 36, 29, 36, 36, 31, 29, 36, 36, 31, 29, 31, 33, 31, 36, 36};
-    std::vector<float> buf((int)((32 * beat + 0.6f) * SR), 0.0f);
+        {76, 1}, {79, 1}, {81, 1},   {79, 2}, {76, 1},   {74, 1}, {76, 1}, {79, 1},   {76, 2}, {74, 1},
+        {72, 1}, {74, 1}, {76, 1},   {79, 1}, {76, 1}, {74, 1},   {72, 1}, {74, 1}, {69, 1},   {72, 3},
+        {79, 1}, {81, 1}, {84, 1},   {81, 2}, {79, 1},   {76, 1}, {79, 1}, {81, 1},   {79, 3},
+        {81, 1}, {79, 1}, {76, 1},   {74, 1}, {76, 1}, {79, 1},   {76, 1}, {74, 1}, {72, 1},   {72, 3}};
+    static const int chordId[16] = {0, 0, 1, 2, 3, 0, 1, 0, 0, 3, 2, 1, 3, 1, 0, 0};      // C, G, Am, F
+    static const int arp[4][3] = {{48, 55, 64}, {43, 50, 59}, {45, 52, 60}, {41, 48, 57}};
+    std::vector<float> buf((int)((48 * beat + 2.0f) * SR), 0.0f);
     float t = 0;
     for (size_t i = 0; i < sizeof(mel) / sizeof(mel[0]); i++) {
-        if (mel[i].midi > 0) addTone(buf, t, mel[i].beats * beat * 0.92f, 440.0f * powf(2.0f, (mel[i].midi - 69) / 12.0f), 0, 0.34f);
+        addTone(buf, t, 2.6f, 440.0f * powf(2.0f, (mel[i].midi - 69) / 12.0f), 0, 0.30f);
         t += mel[i].beats * beat;
     }
-    for (int bar = 0; bar < 16; bar++) {                      // oom-pah accompaniment
-        float st = bar * 2 * beat; int r = roots[bar]; bool minor = (r == 33);
-        addTone(buf, st, beat * 0.45f, 440.0f * powf(2.0f, (r + 12 - 69) / 12.0f), 1, 0.45f);
-        int c[3] = {r + 24, r + 24 + (minor ? 3 : 4), r + 31};
-        for (int k = 0; k < 3; k++) addTone(buf, st + beat, beat * 0.4f, 440.0f * powf(2.0f, (c[k] - 69) / 12.0f), 2, 0.13f);
-    }
+    for (int bar = 0; bar < 16; bar++)                        // soft arpeggio underneath
+        for (int k = 0; k < 3; k++)
+            addTone(buf, (bar * 3 + k) * beat, 1.6f, 440.0f * powf(2.0f, (arp[chordId[bar]][k] - 69) / 12.0f), 1, 0.13f);
+    const int d = (int)(0.33f * SR);                          // gentle echo
+    for (size_t i = d; i < buf.size(); i++) buf[i] += 0.28f * buf[i - d];
+    int fade = (int)(0.5f * SR);
+    for (int i = 0; i < fade; i++) buf[buf.size() - 1 - i] *= (float)i / fade;
     float mx = 0.001f;
     for (size_t i = 0; i < buf.size(); i++) if (fabsf(buf[i]) > mx) mx = fabsf(buf[i]);
     wavData.clear();
@@ -1518,7 +1556,7 @@ static void buildMusic() {
     wavData.push_back('f'); wavData.push_back('m'); wavData.push_back('t'); wavData.push_back(' ');
     putU32(wavData, 16); putU16(wavData, 1); putU16(wavData, 1); putU32(wavData, 22050); putU32(wavData, 44100); putU16(wavData, 2); putU16(wavData, 16);
     wavData.push_back('d'); wavData.push_back('a'); wavData.push_back('t'); wavData.push_back('a'); putU32(wavData, dataBytes);
-    for (size_t i = 0; i < buf.size(); i++) putU16(wavData, (unsigned int)(short)(buf[i] / mx * 0.85f * 32767.0f) & 0xFFFF);
+    for (size_t i = 0; i < buf.size(); i++) putU16(wavData, (unsigned int)(short)(buf[i] / mx * 0.7f * 32767.0f) & 0xFFFF);
 }
 static void setMusic(bool on) {
 #ifdef _WIN32
@@ -1826,9 +1864,11 @@ static void photoPanel(int kind) {
 }
 
 void drawParkGate() {
+    float vis = gateVis();
+    if (vis < 0.005f) return;                              // zoomed in: the gate is gone, you are 'inside' the park
     float lv = 0.25f + 0.9f * dusk;
     glPushMatrix();
-    glTranslatef(0, 0, -33.0f);
+    glTranslatef(0, -(1.0f - vis) * 40.0f, 34.0f);
     for (int sx = -1; sx <= 1; sx += 2) {                                   // striped pillars with domes
         for (int i = 0; i < 6; i++) { col3(PAL[(i * 3 + (sx > 0 ? 1 : 0)) % 8]); glPushMatrix(); glTranslatef(sx * 10.5f, 1.0f + i * 2.0f, 0); box(3.4f, 2.0f, 3.4f); glPopMatrix(); }
         glColor3f(0.95f, 0.8f, 0.2f); ballAt(sx * 10.5f, 12.9f, 0, 2.3f, 16);
